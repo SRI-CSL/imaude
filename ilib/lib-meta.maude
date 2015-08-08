@@ -1,0 +1,673 @@
+**** loadmaude loaded mymetaterm.maude
+**** mymetaterm.maude
+
+fmod MY-META-TERM is
+   inc META-LEVEL .
+
+******************************************************************************
+**** Syntax utilities
+******************************************************************************
+**** terms
+
+  vars cname op qid : Qid .
+  var sort : Sort .
+  var netl : NeTermList .
+  vars tl tl' : TermList .
+  var const : Constant .
+  var var : Variable .
+  vars term id t t' defaultT : Term .
+  var n : Nat .
+  var mod : Module .
+  var res?? : [ResultPair?] .
+
+  op mkConst : Qid Sort -> Constant .
+  eq mkConst(cname, sort) = qid(string(cname) + "." + string(sort)) .
+
+  op mkQidConst : Qid -> Constant .
+  eq mkQidConst(qid) = mkConst(qid("'" + string(qid)),'Qid) .
+
+  op isAppl : Term -> Bool .
+  eq isAppl(op[netl]) = true .
+  eq isAppl(const) = false .
+  eq isAppl(var) = false .
+
+***  op getOp : Term -> Qid .
+***  eq getOp(op[netl]) = op .
+
+  op getArgs : Term -> TermList .
+  eq getArgs(const) = empty .
+  eq getArgs(var) = empty .
+  eq getArgs(op[netl]) = netl .
+
+  op getOp : Term -> QidList .    *** qid or nil
+  eq getOp(const) = nil .
+  eq getOp(var) = nil .
+  eq getOp(op[netl]) = op .
+
+
+  op first : NeTermList -> Term .
+  eq first((term, tl)) = term .
+
+  op rest : TermList -> TermList .
+  eq rest((term, tl)) = tl .
+  eq rest(empty) = empty .
+
+  op len : TermList -> Nat .
+  eq len(empty) = 0 .
+  eq len((term, tl)) = s len(tl) .
+
+***                     default                        
+  op getNth : TermList Nat Term -> Term . 
+  eq getNth((term,tl), 0, defaultT) = term .
+  eq getNth((term, tl), s n, defaultT) = getNth(tl,n,defaultT) .
+  eq getNth(tl, n, defaultT) = defaultT [owise] .
+
+  op first : NeTermList -> Term .
+  op rest : TermList -> TermList .
+  eq first((term, tl)) = term .
+  eq rest((term, tl)) = tl .
+  eq rest(empty) = empty .
+
+  op eltOf : Term TermList -> Bool .
+  eq eltOf(term, (tl, term, tl')) = true .
+  eq eltOf(term,tl) = false [owise] .
+
+  op getVars : Term -> QidSet .
+  op getVarsL : TermList -> QidSet .
+  eq getVars(var) = var .
+  eq getVars(const) = none .
+  eq getVars(op[netl]) = getVarsL(netl) .
+
+  eq getVarsL(empty) = none .
+  eq getVarsL((term,tl)) = getVars(term) ; getVarsL(tl) .
+
+
+*** sorting -- to get around sortLeq bug
+  op hasSort : Module Term Sort -> Bool .
+  eq hasSort(mod, term, sort) = sortLeq(mod, leastSort(mod, term), sort) .
+
+**** getting the arglist from an object list term of list or multiset sort
+****  singleton sort sort, a or ac constructor with identity id.
+****                 sort   a/acTerm 
+  op olt2tl : Module Sort  Term -> TermList .
+  ceq olt2tl(mod,sort,t) =
+      (if not(res?? :: ResultPair)
+       then empty
+       else (if hasSort(mod,t',sort)
+             then t'
+             else getArgs(t') fi) fi) 
+    if res?? := metaReduce(mod,t)
+    /\ t' := (if res?? :: ResultPair then getTerm(res??) else t fi)  .
+
+endfm
+
+
+**** loadmaude loaded mymetacnv.maude
+***  mymetacnv.maude
+fmod MY-META-CNV is
+  inc CONVERSION .
+  inc MY-META-TERM .
+
+  vars q op  qid : Qid .
+  var n : Nat .
+  var const : Constant .
+  var term : Term .
+
+ 
+*** lifting a term of sort qid to a qid
+
+  op qidT2qid : Term Qid -> Qid .
+  eq qidT2qid(const, qid) =
+      (if sortLeq(['META-LEVEL], getType(const), 'Qid) 
+       then downTerm(const,qid)
+       else qid fi)  .
+  eq qidT2qid(term, qid) = qid [owise] .
+
+  op qid2qidT : Qid -> Constant .
+  eq qid2qidT(qid) = mkQidConst(qid) .
+
+**** assume reduced
+  op natT2nat : Term -> Nat .
+  op natT2nat : Term Nat -> Nat .
+  eq natT2nat(term) = natT2nat(term,0) .
+  eq natT2nat(term,n) = 
+       (if term :: GroundTerm and hasSort(['META-LEVEL],term,'Nat)
+        then downTerm(term,n)
+        else  n
+        fi)  .
+
+  op nat2natT : Nat -> Term .
+  eq nat2natT(n) = upTerm(n) .
+
+endfm
+
+***(
+Maude> red qidT2qid(''abc.Qid,'none) .
+reduce in MY-META-CNV : qidT2qid(''abc.Qid, 'none) .
+rewrites: 12 in 20ms cpu (18ms real) (600 rewrites/second)
+result Sort: 'abc
+Maude> red qidT2qid(upTerm(0),'none) .
+reduce in MY-META-CNV : qidT2qid(upTerm(0), 'none) .
+rewrites: 12 in 0ms cpu (0ms real) (~ rewrites/second)
+result Sort: 'none
+
+Maude> red natT2nat(upTerm(99)) .
+reduce in MY-META-CNV : natT2nat(upTerm(99)) .
+rewrites: 11 in 0ms cpu (2ms real) (~ rewrites/second)
+result NzNat: 99
+Maude> red natT2nat(upTerm('abc)) .
+reduce in MY-META-CNV : natT2nat(upTerm('abc)) .
+rewrites: 10 in 0ms cpu (0ms real) (~ rewrites/second)
+result Zero: 0
+)
+**** loadmaude loaded mymetacxt.maude
+*** load mymetacxt
+fmod MY-META-CXT is
+   inc META-LEVEL .
+
+**** Contexts
+  var nectl : NeCTermList .
+  var op : Qid .
+  var t : Term .
+  var ctxt : Context .
+  vars tl tl' : TermList .
+
+**** assume argument not []
+  op getCxtArgs : Context -> NeCTermList .
+  eq getCxtArgs(op[nectl]) = nectl .
+
+  op getCxtOp : Context -> Qid .  
+  eq getCxtOp(op[nectl]) = op .
+
+  op cxtFill : Context Term -> Term .
+  op cxtFillL : NeCTermList Term -> NeTermList .
+
+  eq cxtFill([], t) = t .
+  eq cxtFill(op[nectl], t) = op[cxtFillL(nectl,t)] .
+
+  eq cxtFillL((tl, ctxt, tl'), t) = tl, cxtFill(ctxt, t), tl' .
+
+
+endfm
+
+
+**** loadmaude loaded mymetasubst.maude
+*** load mymetasubst
+fmod MY-META-SUBST is
+   inc META-LEVEL .
+
+  vars  var var' : Variable .
+  vars term term' defaultT : Term .
+  var sb : Substitution .
+  var const : Constant .
+  var netl : NeTermList .
+  var tl : TermList .
+  var op : Qid .
+  var sort : Sort .
+  vars cond cond' : Condition .
+
+
+**** Substitutions
+
+  op lookupD : Substitution Variable Term -> Term .
+  eq lookupD(((var <- term ) ; sb), var, defaultT) = term .
+  eq lookupD(sb, var, defaultT) = defaultT [owise] .
+
+  op substApp : Substitution Term  -> Term .
+  op substAppL : Substitution TermList  -> TermList .
+  op substAppL : Substitution NeTermList  -> NeTermList .
+
+  eq substApp(sb,var) = lookupD(sb,var,var) .
+  eq substApp(sb,const) = const .
+  eq substApp(sb,op[netl]) = op[substAppL(sb,netl)] .
+
+  eq substAppL(sb,empty) = empty .
+  eq substAppL(sb,(term, tl)) = (substApp(sb,term), substAppL(sb,tl)) .
+
+  op substApp : Substitution Condition -> Condition .
+  op substApp : Substitution EqCondition -> EqCondition .
+  eq substApp(sb,(nil).EqCondition) = (nil).EqCondition .
+  eq substApp(sb,(term = term')) =
+         (substApp(sb,term) = substApp(sb,term')) .
+  eq substApp(sb,(term := term')) =
+         (substApp(sb,term) := substApp(sb,term')) .
+  eq substApp(sb,(term : sort)) = substApp(sb,term) : sort .
+  eq substApp(sb,(term => term')) =
+         (substApp(sb,term) => substApp(sb,term')) .
+  eq substApp(sb,cond /\ cond') = substApp(sb,cond) /\ substApp(sb, cond') .
+
+  op boundP : Substitution Variable -> Bool .
+  eq boundP((var <- term); sb, var) = true .
+  eq boundP(sb,var) = false [owise] .
+
+**** assumes at most one binding per var
+  op update : Substitution Variable Term -> Substitution .
+  eq update(((var <- term') ; sb), var, term) =  (var <- term) ; sb .
+  eq update(sb, var,term) = (var <- term) ; sb [owise] .
+
+endfm
+
+**** loadmaude loaded mymetastmt.maude
+**** mymetastmt.maude
+fmod MY-META-STMT is
+  inc META-LEVEL .
+
+  vars q qid : Qid .
+  var str : String .
+  var attrs : AttrSet .
+  var types : TypeList .
+  var type : Type .
+  vars lhs rhs : Term .
+  var eqcond : EqCondition .
+  var cond : Condition .
+  var rule : Rule .
+  var eqn : Equation .
+  var opdecl : OpDecl .
+
+******************************************************************************
+**** Attributes
+******************************************************************************
+****   
+  op getMetaData : AttrSet -> String .
+  eq getMetaData(metadata(str) attrs) = str .
+  eq getMetaData(attrs) = "" [owise] .
+
+******************************************************************************
+**** Operations
+******************************************************************************
+****   op (op_:_->_[_].) : Qid TypeList Type AttrSet -> OpDecl
+
+  op getOpName : OpDecl -> Qid .
+  eq getOpName((op q : types -> type [attrs] .)) = q .
+
+  op getArgTypes : OpDecl -> TypeList .
+  eq getArgTypes((op q : types -> type [attrs] .)) = types .
+
+  op getResultType : OpDecl -> Type .
+  eq getResultType((op q : types -> type [attrs] .)) = type .
+
+  op getAttrs : OpDecl -> AttrSet .
+  eq getAttrs((op q : types -> type [attrs] .)) = attrs .
+
+  op getMetaData : OpDecl -> String .
+  eq getMetaData(opdecl) = getMetaData(getAttrs(opdecl)) .
+ 
+
+******************************************************************************
+**** Equations
+******************************************************************************
+  op getLhs : Equation -> Term .
+  eq getLhs(eq lhs = rhs [ attrs ] .)  = lhs .
+  eq getLhs(ceq lhs = rhs if eqcond [ attrs ] .)  = lhs .
+
+  op getRhs : Equation -> Term .
+  eq getRhs(eq lhs = rhs [ attrs ] .)  = rhs .
+  eq getRhs(ceq lhs = rhs if eqcond [ attrs ] .) = rhs .
+
+  op getCond : Equation -> EqCondition .
+  eq getCond(eq lhs = rhs [ attrs ] .)  = nil .
+  eq getCond(ceq lhs = rhs if eqcond [ attrs ] . ) = eqcond .
+
+  op getAttrs : Equation -> AttrSet .
+  eq getAttrs(eq lhs = rhs [ attrs ] .)  = attrs .
+  eq getAttrs(ceq lhs = rhs if eqcond [ attrs ] . ) = attrs .
+
+  op getMetaData : Equation -> String .
+  eq getMetaData(eqn) = getMetaData(getAttrs(eqn)) .
+
+*** Rule selectors 
+***  op rl_=>_[_]. : Term Term AttrSet -> Rule [ctor] .
+***  op crl_=>_if_[_]. : Term Term Condition AttrSet -> Rule [ctor] .
+
+  op getRuleId : Rule -> Qid .
+  eq getRuleId(rl lhs => rhs [label(q) attrs ] .) = q .
+  eq getRuleId(crl lhs => rhs if cond [label(q) attrs ] .) = q .
+
+  op getLhs : Rule -> Term .
+  eq getLhs(rl lhs => rhs [label(q) attrs ] .) = lhs .
+  eq getLhs(crl lhs => rhs if cond [ attrs ] .) = lhs .
+
+  op getRhs : Rule -> Term .
+  eq getRhs(rl lhs => rhs [ attrs ] .) = rhs .
+  eq getRhs(crl lhs => rhs if cond [ attrs ] .) = rhs .
+
+  op getCond : Rule -> Condition .
+  eq getCond(rl lhs => rhs [ attrs ] .) = nil .
+  eq getCond(crl lhs => rhs if cond   [ attrs ] .) = cond .
+
+  op getAttrs : Rule -> AttrSet .
+  eq getAttrs(rl lhs => rhs [ attrs ] .) = attrs .
+  eq getAttrs(crl lhs => rhs if cond   [ attrs ] .) = attrs .
+
+  op getMetaData : Rule -> String .
+  eq getMetaData(rule) = getMetaData(getAttrs(rule)) .
+
+
+endfm
+
+**** loadmaude loaded mymetaanalysis.maude
+*** load mymetaanalysis
+fmod MY-META-ANALYSIS is
+  inc MY-META-STMT .
+
+****************************************************************************
+*** QidSets 
+*** Not in qid-utilities because depends, sadly on META-LEVEL SortSet
+****************************************************************************
+
+***(
+  sort QidSet .
+  subsorts TypeSet KindSet SortSet < QidSet .
+***  subsorts Qid SortSet < QidSet .
+***  op none : -> QidSet .
+  op _;_ : QidSet QidSet -> QidSet [ctor ditto] .
+
+  op size : QidSet -> Nat .
+  eq size(none) = 0 .
+  eq size(qid ;  qids) = 1 + size(qids) .
+
+  op member : Qid QidSet -> Bool .
+  eq member(qid, none) = false .
+  eq member(qid, q1:Qid ; qids) =
+       if (qid == q1:Qid) then true else member(qid, qids) fi .
+)
+**** size >> |_|, member >> _in_  none :: EmptyTypeSet .
+
+  var rule : Rule .          var rules : RuleSet .
+  vars rlab qid : Qid .      var qids : QidSet .
+  var sort : Sort .          var sortset : SortSet .
+  var mod : Module .         var qidl : QidList .
+  vars src tgt : Term .
+  var n : Nat .
+
+
+*** rule sets
+  op getRuleIds : RuleSet -> QidSet .
+  eq getRuleIds(none) = (none).QidSet .
+  eq getRuleIds(rule rules) =
+        getRuleId(rule) ; getRuleIds(rules) .
+
+  op getRule : RuleSet Qid -> RuleSet .
+  eq getRule(none, qid) = none .
+  eq getRule(rule rules, qid) =
+       if (getRuleId(rule) == qid)
+       then rule 
+       else getRule(rules,qid) 
+       fi .
+
+  op getRules : RuleSet QidSet -> RuleSet .
+  eq getRules(rules, none) = none .
+  eq getRules(rules, qid ; qids) = 
+       getRule(rules, qid) getRules(rules, qids) .
+
+  op getRulesL : RuleSet QidList -> RuleSet .
+  eq getRulesL(rules, nil) = none .
+  eq getRulesL(rules, qid qidl) = 
+       getRule(rules, qid) getRulesL(rules, qidl) .
+
+ 
+  op ruleCount : Qid -> Nat .
+  eq ruleCount(qid) = size(getRuleIds(upRls(qid,true))) .
+
+  op ruleCount : Module -> Nat .
+  eq ruleCount(mod) = size(getRuleIds(getRls(mod))) .
+
+  op constSetBySort : Module  Sort  -> QidSet .
+  op constSetBySortX : OpDeclSet  SortSet  -> QidSet .
+  op constBySortX : OpDecl  SortSet  -> QidSet .
+
+  eq constSetBySort(mod,sort) = 
+       constSetBySortX(getOps(mod), 
+                       ( lesserSorts(mod,sort) ; sort )) .
+
+  eq constSetBySortX(none, sortset)  = none .
+  eq constSetBySortX(od:OpDecl ods:OpDeclSet, sortset) = 
+       constBySortX(od:OpDecl, sortset) ;
+       constSetBySortX(ods:OpDeclSet, sortset) .
+
+***  eq constBySortX('op_:_->_`[_`]`.(qid,tl:TypeList,t:Type,atts:AttrSet), 
+***                   sortset) 
+  eq constBySortX((op qid : tl:TypeList -> t:Type[atts:AttrSet].),
+                   sortset) 
+      = if ((tl:TypeList == nil) and (t:Type in sortset))
+        then qid
+        else none
+        fi .
+
+  op constListBySort : Module  Sort  -> QidList .
+  op constListBySortX : OpDeclSet  SortSet  -> QidList .
+  op constLBySortX : OpDecl  SortSet  -> QidList .
+
+  eq constListBySort(mod,sort) = 
+       constListBySortX(getOps(mod), 
+                       ( lesserSorts(mod,sort) ; sort )) .
+
+  eq constListBySortX(none, sortset)  = nil .
+  eq constListBySortX(od:OpDecl ods:OpDeclSet, sortset) = 
+      ( constLBySortX(od:OpDecl, sortset) 
+       constListBySortX(ods:OpDeclSet, sortset) ) .
+
+  eq constLBySortX((op qid : tl:TypeList -> t:Type[atts:AttrSet].),
+                   sortset) 
+      = if ((tl:TypeList == nil) and (t:Type in sortset))
+        then qid
+        else nil
+        fi .
+
+  op removeRules : Module QidSet -> Module .
+  op removeRules : RuleSet QidSet -> RuleSet .
+  
+***  op mod_is_sorts_._____endm : Qid ImportList SortSet SubsortDeclSet
+***    OpDeclSet MembAxSet EquationSet RuleSet -> Module
+
+  var Q : Qid . var IL : ImportList . 
+  var SS : SortSet . var SSDS : SubsortDeclSet . 
+  var OPDS : OpDeclSet .  
+  var MAS : MembAxSet .  var EQS : EquationSet .
+  var RLS RLS' : RuleSet .
+
+  op setRls : Module RuleSet -> Module .
+  eq setRls(fmod Q is IL sorts SS . SSDS OPDS MAS EQS endfm, RLS') = 
+               (fmod Q is IL sorts SS . SSDS OPDS MAS EQS endfm) .
+  eq setRls(mod qid is IL sorts SS . SSDS OPDS MAS EQS RLS endm, RLS') = 
+                (mod qid is IL sorts SS . SSDS OPDS MAS EQS RLS' endm) .
+  eq setRls(fth qid is IL sorts SS . SSDS OPDS MAS EQS endfth, RLS') = 
+                   (fth qid is IL sorts SS . SSDS OPDS MAS EQS endfth) .
+  eq setRls(th qid is IL sorts SS . SSDS OPDS MAS EQS RLS endth, RLS') =
+         (th qid is IL sorts SS . SSDS OPDS MAS EQS RLS' endth) .
+
+
+  eq removeRules(mod,qids) = setRls(mod, removeRules(getRls(mod),qids)) .
+
+  eq  removeRules(none, qids) = none .
+  eq  removeRules(rule rules, qids) = 
+         if (getRuleId(rule) in qids)
+         then removeRules( rules, qids)
+         else rule removeRules( rules, qids) fi .
+
+**** Need to figure out how to do this hereditarily
+**** or else work in flattened ruleset
+
+
+*** finding the (first) substitution (ruleInstance) such that 
+*** src -(rlab,subst)-> tgt in M
+*** note -- need also the context in general but not here
+
+  op ruleInstance : Module Qid Term Term -> Substitution? .
+  op rInstX : Module Qid Term Term Nat -> Substitution? .
+
+  eq ruleInstance(mod, rlab, src, tgt)
+        = rInstX(mod, rlab, src, tgt, 0) .
+
+  var res : Result4Tuple? .
+  ceq rInstX(mod, rlab, src, tgt, n)
+       = if (res :: Result4Tuple) 
+         then (if (getTerm(res) == tgt)
+               then getSubstitution(res)
+               else rInstX(mod, rlab, src, tgt, s n)
+               fi)
+          else noMatch
+          fi
+    if res := metaXapply(mod, src, rlab, 
+                      none, 0, unbounded, n) .
+
+****cseq with full rule instance info including context**********************
+*** fPath(statelist,rnamelist,state)
+
+  sorts RuleInstance RuleInstance? .
+  subsort RuleInstance < RuleInstance? .
+  op noInst : -> RuleInstance? . 
+  op rinst : Qid Substitution Context -> RuleInstance .
+  op getRuleInstance : Module Qid Term Term -> RuleInstance? .
+  op getRuleInstX : Module Qid Term Term Nat -> RuleInstance? .
+
+  eq getRuleInstance(M:Module, rlab:Qid, src:Term, tgt:Term)
+        = getRuleInstX(M:Module, rlab:Qid, src:Term, tgt:Term, 0) .
+
+
+  ceq getRuleInstX(M:Module, rlab:Qid, src:Term, tgt:Term, n:Nat)
+       = if (res :: Result4Tuple) 
+         then (if (getTerm(res) == tgt:Term)
+               then rinst(rlab:Qid, getSubstitution(res), getContext(res))
+               else getRuleInstX(M:Module, rlab:Qid, src:Term, tgt:Term, s n:Nat)
+               fi)
+          else noInst
+          fi
+    if res := metaXapply(M:Module, src:Term, rlab:Qid, 
+                      none, 0, unbounded, n:Nat) .
+
+
+
+endfm
+
+**** loadmaude loaded mymetacseq.maude
+*** load mymetacseq
+fmod MY-META-CSEQ is
+****  inc MY-META-TERM .
+  inc MY-META-CNV .
+  inc MY-META-ANALYSIS .
+
+***(
+ Informally, a computation is a sequence of the form
+   t0 -(rl1,sb1)-> t1 ... -(rlk,sbk)-> tk
+ 
+ Formally there are several ways to go:
+   1. Define a sort TermOrRuleInst and use lists of these
+   2. Define Step = Term x RuleInst and Comp = Step* x Term
+   3. Comp = Term* x Qid* x Sb* x Term
+ None of these capture the requirement that the rule instance apply
+ to the previous term to get the next term, but 2 at least
+ captures the term-ruleinstance correspondence.  
+)  
+  sorts  Step StepList CSeq .
+  subsort Step < StepList .
+  op nil : -> StepList .
+  op __ : StepList StepList -> StepList [assoc id: nil] .
+
+  op step : Term Qid Substitution -> Step [ctor] .
+  op cseq : StepList Term -> CSeq  [ctor] .
+  op noCSeq : -> CSeq .
+
+  op stepSrc : Step -> Term .
+  op stepRid : Step -> Qid .
+  op stepSb : Step -> Substitution .
+  eq stepSrc(step(src:Term, rid:Qid, sb:Substitution))  = src:Term .
+  eq stepRid(step(src:Term, rid:Qid, sb:Substitution))  = rid:Qid .
+  eq stepSb(step(src:Term, rid:Qid, sb:Substitution))  = sb:Substitution .
+
+
+  op getTgtTerm : StepList Term -> Term .
+  eq getTgtTerm(nil, final:Term) = final:Term .
+  eq getTgtTerm((step(src:Term,rid:Qid, sb:Substitution)  sl:StepList), 
+                 final:Term) = src:Term .
+
+
+*** fp2cseq takes a term metarepresenting a FullPath --
+*** a statelist term, qidlist term and a stateterm 
+*** where lists are constructed from nil with empty syntax
+*** and produces a computation sequence by filling in the missing substitutions
+
+*** extract ruleid from meta-represented quoted id ''abc.def.Qid >> 'abc.def
+*** deprecated -- should specify the default directly
+
+  op getRid : Constant -> Qid .
+  eq getRid(c:Constant) = qidT2qid(c:Constant,'?) .
+
+  op fp2cseq : Module Term -> CSeq .
+  op fp2cseqx : Module TermList TermList Term StepList -> CSeq .
+
+  eq fp2cseq(M:Module, 'noPath.FullPath) = noCSeq .
+  eq fp2cseq(M:Module, 'fpath[stlT:Term, rnlT:Term, sT:Term]) =
+        fp2cseqx(M:Module, 
+                 olt2tl(M:Module,'State, stlT:Term), 
+                 olt2tl(M:Module, 'RuleName, rnlT:Term), 
+                 sT:Term, nil) .
+
+
+*** no steps
+  eq fp2cseqx(M:Module, empty, empty, sT:Term, stepL:StepList) 
+       = cseq(stepL:StepList,sT:Term)  .
+
+*** two or more steps left
+  eq fp2cseqx(M:Module,
+              (stm:Term, stl:TermList),  (rtm:Term, rtl:TermList), 
+               sT:Term, stepL:StepList) 
+     =
+     fp2cseqx(M:Module, stl:TermList, rtl:TermList, sT:Term, 
+              (stepL:StepList 
+               step(stm:Term, qidT2qid(rtm:Term,'?),
+                    ruleInstance(M:Module,qidT2qid(rtm:Term,'?),
+                                 stm:Term, getNth(stl:TermList,0,sT:Term))))) .
+ 
+
+
+  sorts  xStep xStepList .
+  subsort xStep < xStepList .
+  op nil : -> xStepList .
+  op __ : xStepList xStepList -> xStepList [assoc id: nil] .
+
+  op xstep : Term RuleInstance Term -> xStep [ctor] .
+
+  op fp2steps : Module Term -> xStepList .
+  op fp2stepsx : Module TermList TermList  xStepList -> xStepList .
+
+  eq fp2steps(M:Module, 'noPath.FullPath) = nil .
+  eq fp2steps(M:Module, 'fpath[stlT:Term, rnlT:Term, sT:Term]) =
+        fp2stepsx(M:Module, 
+                 olt2tl(M:Module,'State, '__[stlT:Term,sT:Term]),
+                 olt2tl(M:Module, 'RuleName, rnlT:Term), 
+                 nil) .
+
+*** no steps left  both stl should be the final state and rtl should be empty
+  eq fp2stepsx(M:Module, stl:TermList, rtl:TermList, stepL:xStepList) 
+     = stepL:xStepList [owise] .
+
+
+*** one or more steps left
+  eq fp2stepsx(M:Module,
+              (srcT:Term, tgtT:Term, stl:TermList),  (rtm:Term, rtl:TermList), 
+              stepL:xStepList) 
+     =
+     fp2stepsx(M:Module, (tgtT:Term, stl:TermList), rtl:TermList,
+              (stepL:xStepList 
+               xstep(srcT:Term, 
+                     getRuleInstance(M:Module,qidT2qid(rtm:Term,'?), 
+                                     srcT:Term, tgtT:Term),
+                     tgtT:Term))) .
+ 
+endfm
+
+
+fmod MY-META-ALL is
+  inc MY-META-TERM .
+  inc MY-META-CNV .
+  inc MY-META-CXT .
+  inc MY-META-SUBST .
+  inc MY-META-STMT .
+  inc MY-META-ANALYSIS .
+  inc MY-META-CSEQ .
+
+endfm
+
+
+

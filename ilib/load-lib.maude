@@ -1,0 +1,18 @@
+**** assumes HLA model,
+
+load lib-util
+load lib-meta   **** defines MY-META-ALL
+load lib-imaude              **** defines RFE
+mod RFE is
+  inc REWRITE .
+***  inc FILEMANAGER .
+  inc G2D .
+  inc SEQUENCER .
+  inc LISTENER .
+endm
+
+**** load PLACORE/load-pla-core                **** to get the latest
+
+--- mod HLA-DRONE is inc META-AGENT . endm
+
+--- loop init .

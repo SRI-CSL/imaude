@@ -1,0 +1,1752 @@
+**** loadmaude loaded simple.maude
+fmod SIMPLE is
+  pr NAT .
+  inc MODEL-CHECKER .
+  inc QID-LIST .
+
+**** Model checker sorts and ops states, transitions, results
+***  sorts State RuleName Transition TransitionList ModelCheckResult .
+***  subsort Qid < RuleName .
+***  ops unlabeled deadlock : -> RuleName .
+***  op {_,_} : State RuleName -> Transition .
+***  subsort Transition < TransitionList .
+***  op nil : -> TransitionList [ctor] .
+***  op __ : TransitionList TransitionList -> TransitionList
+***                  [ctor assoc id: nil] .
+***  subsort Bool < ModelCheckResult .
+***  op counterexample : TransitionList TransitionList -> ModelCheckResult 
+***                            [ctor] .
+***  op _|=_ : State Formula -> [ModelCheckResult]
+
+*** avoid mc search for testing propositions
+
+***  op _sat_ : State Prop -> ModelCheckResult .
+***  eq (S:State |= P:Prop) = (S:State sat P:Prop) .
+
+  sort RuleNameList .
+  subsort RuleName < RuleNameList .
+  subsort QidList < RuleNameList .
+  op nil : -> RuleNameList [ctor] .
+  op __ : RuleNameList RuleNameList -> RuleNameList [ctor ditto] .
+**** [ctor assoc id: nil] .
+
+  op member : RuleName RuleNameList -> Bool .
+  eq member(rn:RuleName, rnl:RuleNameList rn:RuleName rnl':RuleNameList )
+       = true .
+  eq member(rn:RuleName, rnl:RuleNameList) = false [owise] .
+
+  sort StateList .
+  subsort State < StateList .
+  op nil : -> StateList .
+  op __ : StateList StateList -> StateList [assoc id: nil] .
+
+  ops getPre getPost : ModelCheckResult -> TransitionList .
+  eq getPre(b:Bool) = nil .
+  eq getPost(b:Bool) = nil .
+  eq getPre(counterexample(tl0:TransitionList,tl1:TransitionList))
+        = tl0:TransitionList .
+  eq getPost(counterexample(tl0:TransitionList,tl1:TransitionList))
+        = tl1:TransitionList .
+
+  op getState  : Transition -> State .
+  op getRuleName : Transition -> RuleName .
+  eq getState({s:State,rn:RuleName}) = s:State .
+  eq getRuleName({s:State,rn:RuleName}) = rn:RuleName .
+
+  op getRuleNames : TransitionList -> RuleNameList .
+  eq getRuleNames(nil) = nil .
+  eq getRuleNames({s:State,rn:RuleName} tl:TransitionList) = 
+      rn:RuleName getRuleNames(tl:TransitionList) .
+
+  op mc2Rules : ModelCheckResult -> RuleNameList .
+  eq mc2Rules(b:Bool) = nil .
+  eq mc2Rules(counterexample(tl0:TransitionList,tl1:TransitionList))
+        = (getRuleNames(tl0:TransitionList) getRuleNames(tl1:TransitionList)) .
+
+  op length : TransitionList -> Nat .
+  eq length(nil) = 0 .
+  eq length(tr:Transition tl:TransitionList) = length(tl:TransitionList) + 1 .
+
+  sort SimplePath .
+  op spath : RuleNameList State -> SimplePath .
+  op noPath : -> SimplePath .
+  op getState : SimplePath -> State .
+  eq getState(spath(rls:RuleNameList,s:State)) = s:State .
+
+  op getSPRuleNames : SimplePath -> RuleNameList .
+  eq getSPRuleNames(spath(rls:RuleNameList,s:State)) = rls:RuleNameList .
+  eq getSPRuleNames(noPath) = (nil).RuleNameList .
+
+*** assumes that modelcheck result is a boolean or that the 
+*** concatenation of the transition lists contains a state that satisfies 
+*** the proposition 
+
+  op getPath : Prop ModelCheckResult -> SimplePath .
+  op getPathx : Prop RuleNameList TransitionList -> SimplePath .
+
+  eq getPath(P:Prop, b:Bool) = noPath .
+  eq getPath(P:Prop, counterexample(tl0:TransitionList,tl1:TransitionList)) 
+      = getPathx(P:Prop, nil, (tl0:TransitionList tl1:TransitionList) ) .
+
+  eq getPathx(P:Prop, rnl:RuleNameList, nil) = noPath .
+  eq getPathx(P:Prop, 
+              rnl:RuleNameList, 
+              {s:State, rn:RuleName} tl:TransitionList)
+    
+    = if ((s:State |= P:Prop) :: Bool)  *** ((s:State sat P:Prop) :: Bool)
+      then spath(rnl:RuleNameList, s:State)
+      else  getPathx(P:Prop, (rnl:RuleNameList rn:RuleName), tl:TransitionList)
+      fi .
+
+  op findPath : State Prop -> SimplePath .
+  eq findPath(S:State, P:Prop) = 
+         getPath(P:Prop, modelCheck(S:State, ~ <> P:Prop)) .
+
+  sort FullPath .
+  op fpath : StateList RuleNameList State -> FullPath .
+  op noPath : -> FullPath .
+  op getState : FullPath -> State .
+  eq getState(fpath(stl:StateList, rls:RuleNameList,s:State)) = s:State .
+  op getRuleNames : FullPath -> RuleNameList .
+  eq getRuleNames(fpath(stl:StateList, rls:RuleNameList,s:State)) 
+        = rls:RuleNameList .
+
+
+*** assumes further that all rule names preceding the witness state
+*** name real rules (are qids in fact).
+
+  op getFPath : Prop ModelCheckResult -> FullPath .
+  op getFPathx : Prop StateList RuleNameList TransitionList 
+                 -> FullPath .
+
+  eq getFPath(P:Prop, b:Bool) = noPath .
+  eq getFPath(P:Prop, counterexample(tl0:TransitionList,tl1:TransitionList)) 
+      = getFPathx(P:Prop, nil, nil,
+                  (tl0:TransitionList tl1:TransitionList) ) .
+*****
+  eq getFPathx(P:Prop, stl:StateList, rnl:RuleNameList, nil) = noPath .
+  eq getFPathx(P:Prop, stl:StateList, rnl:RuleNameList, 
+              {s:State, rn:RuleName} tl:TransitionList)
+    = if ((s:State |= P:Prop) :: Bool)  *** ((s:State sat P:Prop) :: Bool)
+      then fpath(stl:StateList, rnl:RuleNameList, s:State)
+      else  getFPathx(P:Prop, 
+                     (stl:StateList s:State), (rnl:RuleNameList rn:RuleName),
+                      tl:TransitionList)
+      fi .
+
+  op findFPath : State Prop -> FullPath .
+  eq findFPath(S:State, P:Prop) = 
+          getFPath(P:Prop, modelCheck(S:State, ~ <> P:Prop)) .
+
+endfm
+
+**** loadmaude loaded val.maude
+**** Collection of value sorts for notes and entries
+**** Top-level Val 
+**** useful cases SVal (string) QVal (qidlists) TVal (terms)
+**** 
+
+fmod VAL is
+  sort Val .
+
+**** test for values of same subsort
+  op compat : [Val] [Val] -> Bool .
+  eq compat(x:[Val],y:[Val]) = false [owise] .
+  op dummy : -> Val [ctor] .
+  eq compat(v:Val,dummy) = true .
+  eq compat(dummy,v:Val) = true .
+  op undefined : -> [Val] [ctor] .
+
+endfm
+
+fmod SVAL is 
+  inc STRING .
+  inc VAL .
+
+  sort SVal .
+  subsort SVal < Val .
+  op sv : String -> SVal .
+  eq compat(x:SVal,y:SVal) = true .
+
+  var str : String .
+  op svalString : SVal -> String .
+  eq svalString(sv(str)) = str .
+
+endfm
+
+fmod QVAL is 
+  inc QID-LIST .
+  inc VAL .
+
+  sort QVal .
+  subsort QVal < Val .
+  op ql : QidList -> QVal .
+  eq compat(x:QVal,y:QVal) = true .
+
+  var qidl : QidList .
+  op qvalQidList : QVal -> QidList .
+  eq qvalQidList(ql(qidl)) = qidl .
+
+endfm
+
+fmod TVAL is 
+  inc META-LEVEL .
+  inc VAL .
+
+  sort TVal .
+  subsort TVal < Val .
+  op tm : Qid Term -> TVal .
+  eq compat(x:TVal,y:TVal) = true .
+
+  var modname : Qid .
+  var term : Term .
+  op tvalModname : TVal -> Qid .
+  op tvalTerm : TVal -> Term .
+  eq tvalModname(tm(modname,term)) = modname .
+  eq tvalTerm(tm(modname,term)) = term .
+
+  op dumTv : -> TVal .
+  eq dumTv = tm('BOOL,'true.Bool) .
+
+endfm
+
+**** loadmaude loaded notes.maude
+**** General Notes data type -- extends Map with lookupd and extensible range
+**** requires val.maude
+
+view ValD from DEFAULT to VAL is
+  sort Elt to Val .
+  op 0 to term undefined .
+endv
+
+fmod NOTES is
+  inc ARRAY{String,ValD} * 
+       (sort Array{String,ValD} to Notes, 
+        sort Entry{String,ValD} to Note, 
+        op empty to mt, 
+        op _|->_ to _:=_ , 
+        op _;_ to _`,_ ) .
+
+****  op _|->_ : X$Elt Y$Elt -> Entry{X,Y} [ctor] .
+****  op _,_ : Map{X,Y} Map{X,Y} -> Map{X,Y} [ctor assoc comm id: empty ... ] .
+
+
+****                        default  
+  op lookupd : Notes String [Val] -> [Val] .
+  op lookupd : Notes String Val -> Val .
+
+  var notes : Notes . var tag : String . var default : [Val] .
+  eq lookupd(notes,tag,default) = 
+       (if compat(notes[tag],default)
+        then notes[tag]
+        else default fi) .
+endfm
+
+
+**** example of extension
+fmod  SNOTES is
+  inc NOTES .
+  inc SVAL .
+
+**** refining lookup type 
+  op lookupd : Notes String SVal -> SVal .
+
+endfm
+
+
+fmod  QNOTES is
+  inc NOTES .
+  inc QVAL .
+
+  var notes : Notes .
+  var tag : String .
+  var qidl : QidList .
+
+  op lookupd : Notes String QVal -> QVal .
+  op extendQNote : Notes String QidList -> Notes .
+  eq extendQNote(notes,tag,qidl) =
+      insert(tag, ql(qvalQidList(lookupd(notes,tag,ql(nil))) qidl), notes) .
+endfm
+
+
+fmod TNOTES is
+  inc NOTES .
+  inc TVAL .
+
+  var notes : Notes . var att : String . var defaultT : Term .
+  op tlookup : Notes String Term -> Term .
+  eq tlookup(notes,att,defaultT) = 
+       (if notes[att] :: TVal
+        then tvalTerm(notes[att])
+        else defaultT 
+        fi) .
+endfm
+
+fmod QSTNOTES is  inc QNOTES . inc SVAL . inc TVAL . endfm
+***(
+red mt .
+red mt["x"] .
+
+red compat(mt["x"], undefined) .
+**** result Bool: false
+red lookupd(mt,"x",undefined) .
+**** result [Val]: undefined
+red "x" := sv("x") .
+**** result Note: "x" |-> sv("x")
+red lookupd("x" := sv("x"),"x",sv("y")) .
+**** result SVal: sv("x")
+red lookupd("x" := sv("x"),"y",sv("y")) .
+**** result SVal: sv("y")
+red lookupd((("x" := sv("x")),("y" := sv("y"))), "y",sv("y")) .
+
+)
+
+**** loadmaude loaded mset.maude
+fmod MSET{X :: TRIV} is
+  protecting NAT .
+  sorts NeMSet{X} MSet{X} .
+  subsort X$Elt < NeMSet{X} < MSet{X} .
+
+  op mt : -> MSet{X} [ctor] .
+  op _!_ : MSet{X} MSet{X} -> MSet{X} [ctor assoc comm id: mt ] .
+****  op _!_ : NeMSet{X} MSet{X} -> NeMSet{X} [ctor ditto] .
+  op _!_ : NeMSet{X} MSet{X} -> NeMSet{X} [ditto] .
+
+  var E : X$Elt .
+  var N : NeMSet{X} .
+  vars A S S' : MSet{X} .
+  var C : Nat .
+
+  op del : X$Elt MSet{X} -> MSet{X} .
+  eq del(E, (E ! S)) = del(E, S) .
+  eq del(E, S) = S [owise] .
+
+  op _eltOf_ : X$Elt MSet{X} -> Bool .
+  eq E eltOf (E ! S) = true .
+  eq E eltOf S = false [owise] .
+
+  op count : X$Elt MSet{X} -> Nat .  
+  eq count(E, (E ! S)) = s count(E, S) .
+  eq count(E, S) = 0 [owise] .
+
+  op card : MSet{X} -> Nat .
+  op card : NeMSet{X} -> NzNat .
+  op $crd : MSet{X} Nat -> Nat .
+  eq card(S) = $crd(S,0) .
+  eq $crd(mt,C) = C .
+  eq $crd ((E ! S),C) =  $crd(S, s C) .
+
+  op inBoth : MSet{X} MSet{X} -> MSet{X} .
+  eq inBoth(S, N) = $inBoth(S, N, mt) .
+
+  op $inBoth : MSet{X} MSet{X} MSet{X} -> MSet{X} .
+  eq $inBoth((E ! S), (E ! S'), A) = $inBoth(S, S',  (E ! A) ) .
+  eq $inBoth(S, S', A) = A [owise] .
+
+  op diff : MSet{X} MSet{X} -> MSet{X} .
+  eq diff((E ! S), (E ! S')) = diff(S,S') .
+  eq diff(S,S') = S [owise] .
+
+endfm
+
+fmod TEST-MSET is
+  inc MSET{Nat} * ( sort NeMSet{Nat} to NeNatMSet, sort MSet{Nat} to NatMSet ) .
+endfm
+
+***(
+ red card( 1 ! 1 ! 2 ! 3 ! 4) .
+ red count(1, 1 ! 1 ! 2 ! 3 ! 4) .
+ red count(3, 1  1  2 3 4) .
+ red count(5, 1 1 2 3 4) .
+
+ red diff(1 1 2, 1 2) .
+ red diff(1 1 2 3, 1 2) .
+
+ red inBoth(1 2 3 3, 1 1 2 3 3) .
+
+)
+fmod LIST-AND-MSET{X :: TRIV} is
+  protecting LIST{X} .
+  protecting MSET{X} .
+
+  var E : X$Elt .
+  var L : List{X} .
+  var S : MSet{X} .
+
+  op list2mset : List{X} -> MSet{X} .
+  op list2mset : NeList{X} -> NeMSet{X} .
+  eq list2mset(nil) = mt .
+  eq list2mset(E L) = E ! list2mset(L) .
+
+  op mset2list : MSet{X} -> List{X} .
+  op mset2list : NeMSet{X} -> NeList{X} .
+  eq mset2list(mt) = nil .
+  eq mset2list((E ! S)) = E mset2list(S) .
+
+  op filter : List{X} MSet{X} -> List{X} .
+  eq filter(nil, S) = nil .
+  eq filter(E L, S) = if E eltOf S then E filter(L, S) else filter(L, S) fi .
+
+  op filterOut : List{X} MSet{X} -> List{X} .
+  eq filterOut(nil, S) = nil .
+  eq filterOut(E L, S) = 
+       if E eltOf S then filterOut(L, S) else E filterOut(L, S) fi .
+endfm
+
+fmod TEST-LIST-MSET-NAT is
+  inc LIST-AND-MSET{Nat} * 
+      (sort NeList{Nat} to NeNatList, sort List{Nat} to NatList,
+       sort NeMSet{Nat} to NeNatMSet, sort MSet{Nat} to NatMSet ) .
+endfm
+
+fmod TEST-LIST-MSET-QID is
+  inc LIST-AND-MSET{Qid} * 
+      ( sort NeList{Qid} to NeQidList, sort List{Qid} to QidList,
+        sort NeMSet{Qid} to NeQidMSet, sort MSet{Qid} to QidMSet ) .
+endfm
+
+
+***(
+red list2mset('a 'b 'a) .
+red mset2list('a ! 'b ! 'a) .
+red filter('a 'b 'a, 'b) .
+red filter('a 'b 'a, 'a) .
+red filter('a 'b 'a, 'c) .
+
+red filterOut('a 'b 'a, 'a) .
+red filterOut('a 'b 'a, 'b) .
+red filterOut('a 'b 'a, 'c) .
+)
+**** loadmaude loaded natqid.maude
+
+**** get head, tail, last, front (NEList), reverse,  occurs, size  from List{X}
+
+**** extend LIST-AND-MSET with prefix, postfix ops
+
+fmod XLIST{X :: TRIV} is
+  inc LIST-AND-MSET{X} .
+
+  vars E E' : X$Elt .
+  vars L L0 : List{X} .
+  var n : Nat .
+
+  op getNth : Nat List{X} X$Elt -> X$Elt .
+  eq getNth(0, E' L, E) = E' .
+  eq getNth(s n, E' L, E) = getNth(n, L, E) .
+  eq getNth(n, L, E) = E [owise] .
+
+  ops getPre getPost allButN  lastN : Nat List{X} -> List{X} .
+
+  **** getPre(n,L) is prefix of L of length min(n, len(L))
+  eq getPre(0, L) = nil .
+  eq getPre(s n,  nil) = nil .
+  eq getPre(s n, E L) = ( E getPre(n,L) ) .
+
+  **** getPost(n,L) is L' such that L = getPre(n,L) L'
+  eq getPost(0, L) = L .
+  eq getPost(s n, nil) = nil .
+  eq getPost(s n,  E L) = getPost(n, L) .
+
+  **** like getPre getPost but from right end
+  eq lastN(0,  L) = nil .
+  eq lastN(s n,  nil) = nil .
+  eq lastN(s n, L E) =  lastN(n, L) E .
+
+  eq allButN(0,  L) = L .
+  eq allButN(s n,  nil) = nil .
+  eq allButN(s n, L E) =  allButN(n, L) .
+
+  op isPrefix : List{X} List{X} -> Bool .
+  eq isPrefix(L0,L) = size(L0) <= size(L) and (getPre(size(L0), L) == L0) .
+
+  op lDiff : List{X} List{X} -> List{X} .
+  eq lDiff(L,L0) = filterOut(L, list2mset(L0)) .
+
+endfm
+
+fmod NATS is
+  inc XLIST{Nat} 
+       * (sort NeList{Nat} to NeNatList, sort List{Nat} to NatList, 
+          sort NeMSet{Nat} to NeNatMSet, sort MSet{Nat} to NatMSet) .
+endfm
+
+fmod QIDS is
+  inc XLIST{Qid} 
+       * (sort NeList{Qid} to NeQidList, sort List{Qid} to QidList, 
+          sort NeMSet{Qid} to NeQidMSet, sort MSet{Qid} to QidMSet) .
+endfm
+
+fmod NAT-QID is
+  inc QIDS .
+  inc NATS .
+  inc CONVERSION .
+
+  var q q' : Qid . vars ql ql' : QidList . var qs : QidMSet .
+  vars n n' l cur : Nat . vars nl nl' : NatList . vars ns ns' : NatMSet .
+
+  vars  qstr str astr : String .
+  var f fres : FindResult .
+
+**** assumes string(qid)  represents a Nat .
+  op qid2nat : Qid -> Nat .
+  eq qid2nat(q) = rat(string(q), 10) .
+
+  op nat2qid : Nat -> Qid .
+  eq nat2qid(n) = qid(string(n,10)) .
+
+***(
+**** original
+**** print QidList as space separated string.
+  op qidl2str : QidList -> String .
+  eq qidl2str(nil) = "" .
+  eq qidl2str(q) = string(q) .
+  eq qidl2str(q q' ql) = string(q) + " " + qidl2str(q' ql) .
+)
+
+**** clt made tail recursive 09apr26
+**** print QidList as space separated string.
+  op qidl2str : QidList -> String .
+  eq qidl2str(nil) = "" .
+  eq qidl2str(q ql) = qidl2strX(ql, string(q)) .
+
+**** the aux for tail recursion
+  op qidl2strX : QidList String -> String .
+  eq qidl2strX(nil, str) = str .
+  eq qidl2strX(q ql, str) = qidl2strX(ql, str + " " + string(q)) .
+
+**** remove annoying backquotes (on special characters) inserted by loop mode
+  op removeBQs : String Nat String -> String .
+  ceq removeBQs(str,cur,astr) =
+     (if fres :: Nat 
+      then removeBQs(str,s fres, astr + substr(str,cur,sd(fres,cur))) 
+      else astr + substr(str,cur,length(str))
+      fi)
+    if fres := find(str,"`",cur) .
+
+**** parse string representing qid list 
+  op str2qidl : String -> QidList .
+  op str2qidl$ : String Nat Nat QidList -> QidList .
+  eq str2qidl(qstr) = 
+       (if qstr == ""
+        then nil
+        else str2qidl$(qstr,0,length(qstr),nil)
+        fi )  .
+
+  ceq str2qidl$(qstr,n,l,ql) = 
+     (if n >= l 
+      then ql
+      else (if f :: Nat
+            then (if n' > 0 
+                  then str2qidl$(qstr,f, l, ql qid(substr(qstr,n,n')) )
+                  else str2qidl$(qstr,s n,l,ql)
+                  fi)
+            **** last qid n to end
+            else ql qid(substr(qstr,n,l))
+            fi)
+      fi)
+  if f := find(qstr," ",n) 
+  /\ n' := (if f :: Nat then sd(f,n) else 0 fi)  .   
+
+  op qidl2natl : QidList -> NatList .
+  eq qidl2natl((nil).QidList) = (nil).NatList .
+  eq qidl2natl(q ql) =
+       (if rat(string(q),10) :: Nat then rat(string(q),10) else (nil).NatList fi)
+       qidl2natl(ql) .
+
+  op qids2nats : QidMSet -> NatMSet .
+  eq qids2nats((mt).QidMSet) = (mt).NatMSet .
+  eq qids2nats((q ! qs)) =
+     ( (if rat(string(q),10) :: Nat then rat(string(q),10) else (mt).NatMSet fi) ! 
+       qids2nats(qs) ) .
+
+  op natl2qidl : NatList -> QidList  .
+  eq natl2qidl((nil).NatList) = (nil).QidList .
+  eq natl2qidl(n nl) = qid(string(n,10)) natl2qidl(nl) .
+
+  op nats2qids : NatMSet -> QidMSet .
+  eq nats2qids((mt).NatMSet) = (mt).QidMSet .
+  eq nats2qids((n ! ns)) = (qid(string(n,10)) ! nats2qids(ns)) .
+
+  op natl2str : NatList -> String .
+  eq natl2str((nil).NatList) = "" .
+  eq natl2str(n nl) = string(n,10) + " " + natl2str(nl)  .
+
+  op str2natl : String -> NatList .
+  eq str2natl(str) = qidl2natl(str2qidl(str)) .
+
+endfm
+
+fmod TEST-NAT-QID is
+  inc NAT-QID .
+
+  op nL : -> NatList .   
+  op qL : -> QidList .   
+  op nS : -> NatMSet .
+  op qS : -> QidMSet .
+
+  ops nStr qStr : -> String .
+
+  eq nL = 1 2 3 4 .
+  eq qL = 'a 'b 'c 'd .
+
+  eq nS = (1 ! 2 ! 3 ! 4) .
+  eq qL = ('a ! 'b ! 'c ! 'd ) .
+
+  eq	nStr = "1 2 3 4" .
+  eq  qStr = "a b c d" .
+
+endfm
+
+***( 
+
+red head(nL) .
+red tail(nL) .
+red last(nL) .
+red front(nL) .
+
+red size(nL) .
+red reverse(nL) .
+red occurs(1,nL) .
+red occurs(0,nL) .
+
+red getPre(0, nL) .
+red getPost(0, nL) .
+red getPre(2, nL) .
+red getPost(2, nL) .
+red getPre(5, nL) .
+red getPost(5, nL) .
+red getPre(2, (nil).NatList) .
+red getPost(2, (nil).NatList) .
+
+red allButN(0, nL) .
+red lastN(0, nL) .
+red allButN(2, nL) .
+red lastN(2, nL) .
+red allButN(5, nL) .
+red lastN(5, nL) .
+red allButN(2, (nil).NatList) .
+red lastN(2, (nil).NatList) .
+
+red isPrefix(nL, nL) .
+red isPrefix(0 nL, nL) .
+red isPrefix(1 2, nL) .
+
+red lDiff(nL,nil) .
+red lDiff(nL,1 4) .
+red lDiff(nL,1 4 5) .
+red lDiff(nL,nL) .
+
+red str2qidl(qStr) .
+red qidl2str(qL) .
+
+red str2natl(nStr) .
+red natl2str(nL) .
+
+red qidl2natl(natl2qidl(nL)) .
+red natl2qidl(nL) .
+
+red nats2qids(nS) .
+red qids2nats(nats2qids(nS)) .
+
+)
+
+**** loadmaude loaded stringout.maude
+*** load stringout
+******************************************************************************
+fmod STRING-OUTPUT-HACK is
+   inc META-LEVEL .
+   inc STRING .
+
+****** ****** ****** ****** ****** ****** ****** ****** ****** ****** 
+*** String output hack
+****** ****** ****** ****** ****** ****** ****** ****** ****** ****** 
+*** to ouput a string str:String within loop mode add
+*** metaPrettyPrint(['QID], mkStrConst(str:String))
+
+************************************************
+  op mkSStrConst : String -> Constant .
+  eq mkSStrConst(s:String) =  qid("\"" + s:String + "\"" + ".String") .
+
+  op mkStrConst : String -> Constant .
+  eq mkStrConst(s:String) = 
+    mkSStrConst(fixSlashesSafely(s:String)) .
+
+  op fixSlashes : String Nat Nat -> String .
+  eq fixSlashes(s:String, start:Nat, end:Nat)
+      = if (start:Nat == end:Nat) then ""
+        else 
+        (if (substr(s:String, start:Nat, 1) == "\"") then "\\\""
+         else (if (substr(s:String, start:Nat, 1) == "\\") then "\\\\"
+         else (if (substr(s:String, start:Nat, 1) == "\n") then "\\n"
+         else (if (substr(s:String, start:Nat, 1) == "\t") then "\\t"
+         else substr(s:String, start:Nat, 1) fi) fi) fi) fi )
+         +  fixSlashes(s:String, start:Nat + 1, end:Nat) fi .
+
+  op blockSize : -> Nat .
+  eq blockSize = 4000 .
+
+  op fixSlashesSafely : String -> String .
+  eq fixSlashesSafely(s:String) =
+        fixSlashesSegment(s:String, 0, length(s:String)) .
+    
+  op fixSlashesSegment : String Nat Nat -> String .
+  eq fixSlashesSegment(s:String, start:Nat, end:Nat) =
+     (if (sd(end:Nat,start:Nat) <= blockSize)
+      then fixSlashes(s:String, start:Nat, end:Nat)
+      else ( fixSlashes(s:String, start:Nat, _+_(start:Nat,blockSize)) +
+            fixSlashesSegment(s:String, _+_(start:Nat,blockSize), end:Nat) )
+      fi ) .
+
+  op str2toks : String -> QidList .
+  eq str2toks(s:String) = metaPrettyPrint(['QID], mkStrConst(s:String)) .
+
+  sort String? .
+  subsort String < String? .
+  op notaString : -> String? .
+
+  vars str xstr : String .
+  vars n len : Nat .
+  var tok : Qid .
+
+  op tok2str : Qid -> String? .
+  ceq tok2str(tok) =
+       (if len < 2
+        then notaString 
+        else (if substr(str,0,1) == "\""  and substr(str,sd(len,1),1) == "\"" 
+              then unfixSlashes(substr(substr(str,0,sd(len,1)),1,len))
+              else notaString fi ) fi)
+    if str := string(tok)
+    /\ len := length(str)  .
+
+  op unfixSlashes : String -> String .
+  eq unfixSlashes(str) = unfixSlashesX(str,0,length(str),"") .
+
+  op unfixSlashesX : String Nat Nat String -> String .
+  eq unfixSlashesX(str,n,len,xstr) =
+      (if n >= len
+       then xstr
+       else (if substr(str,n,2) == "\\\"" 
+             then unfixSlashesX(str,s s n,len, xstr + "\"" )
+       else (if substr(str,n,2) == "\\n" 
+             then unfixSlashesX(str,s s n,len, xstr + "\n" )
+       else (if substr(str,n,2) == "\\t" 
+             then unfixSlashesX(str,s s n,len, xstr + "\t" )
+             else unfixSlashesX(str,s n,len, xstr + substr(str,n,1))
+             fi )  fi )  fi )  fi ) .
+
+endfm
+
+**** loadmaude loaded templates.maude
+fmod TBINDINGS is
+  inc MAP{String,String} *
+        (sort Entry{String,String} to TBind, 
+        sort Map{String,String} to TBinds, 
+***        op empty to nil, 
+        op _|->_ to _:~_ ) .
+endfm
+
+fmod TEMPLATES is
+***  inc STRING .
+**** string templates "   %1%  %2%  "
+  inc TBINDINGS .
+
+***(
+  sorts TBind TBinds .
+  subsort TBind < TBinds .
+  op _:~_ : String String -> TBind [ctor] .
+  op nil : -> TBinds [ctor] .
+  op _`,_ : TBinds TBinds -> TBinds [ctor assoc id: nil] .
+)
+
+  vars pat pvar pval pre post filled : String .
+  vars cur patlen varlen : Nat .
+  var bindings : TBinds .
+  var start : FindResult .
+
+  op squote : String -> String .
+  eq squote(pval) = "\"" + pval + "\"" .
+
+
+
+  op fillTemplate : String TBinds -> String .   
+  op fillTemplate0 : String String String Nat Nat  Nat String -> String .   
+
+  eq fillTemplate(pat, ((pvar :~ pval) , bindings)) =
+      fillTemplate(fillTemplate0(pat,pvar,pval,length(pat),length(pvar),0,""),
+                   bindings) .
+  eq fillTemplate(pat, empty) = pat .
+
+  ceq fillTemplate0(pat, pvar, pval,patlen,varlen,cur,filled) = 
+         (if (start :: Nat) 
+          then fillTemplate0(pat,pvar,pval,patlen,varlen,start + varlen,
+                            filled + substr(pat,cur,sd(start,cur)) + pval)
+          else filled + substr(pat,cur,patlen)
+          fi)
+    if start := find(pat,pvar,cur) .
+
+  op stringArrayTemplate : -> String [ctor] .
+  eq stringArrayTemplate = "(array java.lang.String %strings )" .
+
+  op objectArrayTemplate : -> String [ctor] .
+  eq objectArrayTemplate = "(array java.lang.Object %strings )" .
+
+endfm
+
+***(
+fmod TEST-TEMPLATES is
+  inc TEMPLATES .
+  ops pat0 pat1  : -> String .
+  ops b0 b1 : -> TBind .
+  op bs : -> TBinds .
+
+  eq pat0 = "(foo ( %a ) )" .   **** len 13
+  eq pat1 = "(foo ( %a x %b ) )" .  **** len 18
+  eq b0 = ("%a" :~ "(b c)") .
+  eq b1 = ("%b" :~ "dd") .
+  eq bs = (b0, b1) .
+
+endfm 
+
+
+
+red fillTemplate("(foo ( %a ) )", "%a", "(b c)") .
+red fillTemplate("(foo ( %a ) )", "%c", "(b c)") .
+red fillTemplate("(foo ( %a %b ) )", (("%a" :~ "(b c)"), ("%b" :~ "dd"))) .
+red fillTemplate("(foo ( %a %b ) )", (("%a" :~ "(b c)"), ("%b" :~ "dd"), ("%c" :~ "()" ))) .
+
+red fillTemplate("(foo ( %a %b ) )", (("%a" :~ "(b c)"), ("%b" :~ "%c"), ("%c" :~ "()" ))) .
+
+)
+
+**** loadmaude loaded val-io.maude
+**** needs val, stringout (for SVAL)
+**** helper to parse stream of sexpressions represented as qid list
+fmod SPLIT-PAREN is
+  inc QID-LIST .
+
+  sort SplitQidResult .
+  op {_,_,_} : Bool QidList QidList -> SplitQidResult [ctor] .
+
+  var tok : Qid .   vars toks0 toks : QidList .
+  var n : Nat .
+
+  op whiteTok : -> QidList .
+  eq whiteTok = ('\n '\t ) .
+**** splits off first atom or balanced paren group from toks
+  op splitParen : QidList -> SplitQidResult .
+  op splitP : QidList Nat QidList -> SplitQidResult .
+  eq splitParen(tok toks) = 
+       (if occurs(tok,whiteTok)  **** drop pseudo white space
+        then splitParen(toks)
+        else (if tok == '`(
+              then splitP(toks,0,tok)
+              else (if tok == '`)
+                    then {false,nil,tok toks}
+                    else {true,tok,toks} fi ) fi ) fi ) .
+
+  eq splitParen(nil) = {false,nil,nil} .
+
+  eq splitP(tok toks, n, toks0) = 
+     (if occurs(tok,whiteTok)  **** drop pseudo white space
+      then splitP(toks,n,toks0)
+      else
+       (if tok == '`) 
+        then (if n == 0 
+              then {true,toks0 tok,toks}
+              else splitP(toks, sd(n,1), toks0 tok) fi)
+        else (if tok == '`(
+              then splitP(toks, s n, toks0 tok) 
+              else splitP(toks, n, toks0 tok) fi)
+        fi) fi) .
+  eq splitP(nil, n, toks0) = {false,toks0,nil} .
+
+endfm
+
+fmod VAL-IO is
+  inc VAL .
+  inc SPLIT-PAREN .
+
+  var ?v : [Val] .
+  var toks : QidList .
+
+**** external representation
+  op showVal : [Val] -> QidList .  *** must be defined by each subsort
+  eq showVal(dummy) = 'dummy .
+  eq showVal(?v) = nil [owise] .
+
+  op parseVal : QidList -> [Val] .
+  eq parseVal( 'dummy ) = dummy .
+
+  eq parseVal(toks) = undefined [owise] .
+
+endfm
+
+
+fmod QVAL-IO is
+  inc QVAL .
+  inc VAL-IO .
+
+  var qidl : QidList .
+  eq showVal(ql(qidl)) = '`( 'qval qidl '`) .
+  eq parseVal( '`( 'qval qidl '`) ) = ql(qidl) .
+  
+
+endfm
+
+fmod SVAL-IO is
+  inc SVAL .
+  inc VAL-IO .
+  inc STRING-OUTPUT-HACK .
+
+  var str : String .  var ??str : [String?] .
+  var qidl : QidList .
+  eq showVal(sv(str)) = '`( 'sval str2toks("\"" + str + "\"") '`) .
+  ceq parseVal( '`( 'sval qidl '`) )
+          = (if ??str :: String then sv(??str) else undefined fi) 
+      if ??str := tok2str(qidl) .
+
+***(
+  eq showVal(sv(str)) = '`( 'sval str2toks(str) '`) .
+  ceq parseVal( '`( 'sval qidl '`) )
+          = (if ??str :: String then sv(??str) else undefined fi) 
+      if ??str := tok2str(qidl) .
+)
+
+endfm
+
+fmod TVAL-IO is
+  inc TVAL .
+  inc VAL-IO .
+
+**** assume t well formed in modname
+  var modname : Qid .
+  var t : Term .
+  var qidl : QidList .
+
+  eq showVal(tm(modname,t)) = 
+       '`( 'tval modname metaPrettyPrint([modname],t) '`) .
+
+  vars res?? res1?? : [ResultPair?] .
+  ceq parseVal('`( 'tval modname qidl '`) ) = 
+      (if res?? :: ResultPair 
+       then tm(modname,getTerm(res1??)) 
+       else undefined fi)
+     if res?? := metaParse([modname],qidl,anyType) 
+     /\ res1?? := (if res?? :: ResultPair
+                   then metaReduce([modname],getTerm(res??))
+                   else res?? fi) .
+
+endfm
+
+fmod QSTVAL-IO is inc QVAL-IO . inc SVAL-IO .  inc TVAL-IO . endfm
+
+***(
+
+red showVal(ql('a 'b 'c)) .
+red parseVal(showVal(ql('a 'b 'c))) .
+
+red showVal(sv("ab \"\"\ncd")) .
+red parseVal(showVal(sv("ab \"\"\ncd"))) .
+
+red showVal(tm('BOOL,'true.Bool)) .
+red parseVal(showVal(tm('BOOL,'true.Bool))) .
+
+red parseVal('`( 'sval 'a 'b '`)) .
+red parseVal('`( 'tval 'a 'b '`)) .
+red parseVal('`( 'tval 'BOOL 'b.Bool '`)) .
+red parseVal('`( 'noval 'a 'b '`)) .
+result [Val]: undefined
+
+red splitParen(nil) .
+result SplitQidResult: {false,nil,nil}
+
+red splitParen('a 'b) .
+result SplitQidResult: {true,'a,'b}
+
+red splitParen( '`( 'a '`) 'b) .
+result SplitQidResult: {true,'`( 'a '`),'b}
+
+red splitParen( '`( '`( 'a '`) 'b '`) 'c ) .
+result SplitQidResult: {true,'`( '`( 'a '`) 'b '`),'c}
+
+red splitParen( '`( '`( 'a '`) 'b  'c ) .
+result SplitQidResult: {false,'`( '`( 'a '`) 'b 'c,nil}
+
+red splitParen( '`) '`( '`( 'a '`) 'b '`) 'c ) .
+result SplitQidResult: {false,nil,'`) '`( '`( 'a '`) 'b '`) 'c}
+
+)
+**** loadmaude loaded notes-io.maude
+**** needs val-io stringout val
+
+fmod NOTES-IO is
+  inc NOTES .
+  inc VAL-IO .
+
+**** showing and parsing Notes (at token level)
+**** printing entries to QidList
+**** assume tags are convertible strings
+  var tag : String .
+  var val : Val .
+  vars note note1 : Note . vars ?note notes : Notes .
+  vars toks toks0 toks1 : QidList .
+  var tok : Qid .
+  var b : Bool .
+
+  op showNote : Note -> QidList .
+  ops showNotes showNotesX : Notes -> QidList .
+
+  eq showNote(tag := val) = '`( 'note qid(tag) ':= showVal(val)  '`) .
+  eq showNotes(notes) = '`( 'notes showNotesX(notes) '`) .
+  eq showNotesX(mt) = nil .
+  eq showNotesX(note) = showNote(note) .
+  eq showNotesX((note, note1, notes)) = 
+         showNote(note) '\n showNotesX((note1, notes)) .
+
+
+  op parseNote : QidList -> Notes .
+  eq parseNote('`( 'note tok ':= toks '`)) =
+      (if string(tok) :: String and parseVal(toks) :: Val
+       then (string(tok) := parseVal(toks))
+       else mt fi) .
+  eq parseNote(toks) = mt [owise] .
+
+  op parseNotes : QidList -> Notes .
+  op parseNotesX : QidList Notes -> Notes .
+
+  eq parseNotes('`( 'notes toks '`)) = parseNotesX(toks,mt) .
+  eq parseNotes(toks) = mt [owise] .
+
+**** drop non notes, could just fail, shouldn't happen
+
+  ceq parseNotesX(toks,notes) =
+      (if b
+       then (if ?note :: Note
+             then parseNotesX(toks1,(notes, ?note))
+             else parseNotesX(toks1,notes) fi)
+       else notes fi) 
+  if {b,toks0,toks1} := splitParen(toks)
+  /\ ?note := (if b then parseNote(toks0) else mt fi) .
+
+endfm  
+
+fmod QSTNOTES-IO is inc NOTES-IO . inc QSTVAL-IO . endfm
+
+fmod TEST-NOTES-IO is 
+  inc QSTNOTES-IO . 
+  ops qn sn tn : -> Note . 
+  eq qn = "qxy" := ql('x 'y) . 
+  eq sn = "sxy" := sv("x y") .
+  eq tn = "t" := tm('BOOL, 'false.Bool) .
+endfm
+
+
+
+
+***(
+
+red showNote(qn) .
+red parseNote(showNote(qn)) == qn .
+
+red showNote(sn) .
+red parseNote(showNote(sn)) == sn .
+
+red showNote(tn) .
+red parseNote(showNote(tn)) == tn .
+
+red showNotes((qn , sn , tn)) .
+red parseNotes(showNotes((qn , sn , tn))) == (qn , sn , tn) .
+
+)
+
+
+**** loadmaude loaded graph.maude
+***(
+Basic graph structure with support for dot rendering
+
+Main constructors
+graph(<graphname>, <global-notes>, <nodes>, <edges>)
+nd(<nodeid>,<node-notes>)
+ed(<srcid>, <tgtid>, <edge-notes>)
+
+)
+
+fmod NODE is
+  inc NOTES .
+  inc NAT .
+  sort Node .
+  op nd : Nat Notes -> Node .   *** nd(id, notes) 
+
+  var id : Nat .
+  var notes : Notes .
+
+  op nodeId : Node -> Nat .
+  op nodeNotes : Node -> Notes .
+
+  eq nodeId(nd(id,notes)) = id .
+  eq nodeNotes(nd(id,notes)) = notes .
+endfm
+
+
+fmod EDGE is
+  inc NOTES .
+  inc NAT .
+  sort Edge .
+  op ed : Nat Nat Notes -> Edge .   *** ed(src,tgt, notes) 
+
+  vars src tgt : Nat .
+  var notes : Notes .
+
+  ops edgeSrc edgeTgt : Edge -> Nat .
+  op edgeNotes : Edge -> Notes .
+
+  eq edgeSrc(ed(src,tgt,notes)) = src .
+  eq edgeTgt(ed(src,tgt,notes)) = tgt .
+  eq edgeNotes(ed(src,tgt,notes)) = notes .
+
+endfm
+
+view Node from TRIV to NODE is
+  sort Elt to Node .
+endv
+
+view Edge from TRIV to EDGE is
+  sort Elt to Edge .
+endv
+
+**** requires notes.maude (and val.maude)
+fmod GRAPH is
+  inc CONVERSION .
+  inc NOTES .
+  inc NAT-LIST .
+****  inc SVAL .
+  inc LIST-AND-SET{Node} *
+         (sort NeList{Node} to NeNodeList, sort List{Node} to NodeList,
+          sort NeSet{Node} to NeNodeSet, sort Set{Node} to NodeSet) .
+  inc LIST-AND-SET{Edge} *
+         (sort NeList{Edge} to NeEdgeList, sort List{Edge} to EdgeList,
+          sort NeSet{Edge} to NeEdgeSet, sort Set{Edge} to EdgeSet) .
+
+  vars gid gid' att : String .
+  var notes notes' : Notes .
+  var ndl : NodeList .
+  vars edl edl' : EdgeList .
+  var n n' src tgt : Nat .
+  var val : Val .
+  var ?graph : Graph .
+
+  sort Graph .
+  op graph : String Notes NodeList EdgeList -> Graph .
+
+  op graphId : Graph -> String .
+  eq graphId(graph(gid,notes,ndl,edl) ) = gid .
+
+  op graphSetId : Graph String -> Graph .
+  eq graphSetId(graph(gid,notes,ndl,edl), gid') = graph(gid',notes,ndl,edl) .
+
+  op graphNotes : Graph -> Notes .
+  eq graphNotes(graph(gid,notes,ndl,edl)) = notes .
+
+  op graphSetNotes : Graph Notes -> Graph .
+  eq graphSetNotes(graph(gid,notes,ndl,edl), notes') =
+          graph(gid,notes',ndl,edl) .
+
+  op graphNodes : Graph -> NodeList .
+  eq graphNodes(graph(gid,notes,ndl,edl)) = ndl .
+
+  op graphEdges : Graph -> EdgeList .
+  eq graphEdges(graph(gid,notes,ndl,edl)) = edl .
+
+  op mtGraph : -> Graph .
+  eq mtGraph = graph("", mt, nil, nil) .
+
+**** getting info from a graph
+
+**** get nodeid given attribute and value
+  op findNode : NodeList String Val -> FindResult .
+  eq findNode(ndl, att,val) = 
+       (if getNode(ndl,att,val) :: Node
+        then nodeId(getNode(ndl,att,val))
+        else notFound
+        fi) .
+
+**** get node given attribute and value 
+**** returns first one found if any, ow returns nil
+  op getNode : Graph String Val -> NodeList .
+  eq getNode(?graph, att, val) = getNode(graphNodes(?graph),att,val) .
+
+  op getNode : NodeList String Val -> NodeList .
+  eq getNode(nil, att, val) = nil .
+  eq getNode((nd(n, notes) ndl), att, val) = 
+      (if notes[att] == val 
+       then nd(n, notes)
+       else  getNode(ndl, att, val) 
+       fi) .
+
+  op getNode : Graph Nat  -> NodeList .
+  eq getNode(?graph,n) = getNode(graphNodes(?graph),n) .
+  op getNode : NodeList Nat  -> NodeList .
+  eq getNode(nil, n) = nil .
+  eq getNode((nd(n', notes) ndl), n) =
+       (if n' == n
+        then nd(n, notes) 
+        else  getNode(ndl, n) 
+        fi) .
+
+**** all nodes satisfying av pair
+  op getNodes : Graph String Val -> NodeList .
+  eq getNodes(?graph,att,val) = getNodes(graphNodes(?graph),att,val) .
+
+  op getNodes : NodeList String Val -> NodeList .
+  eq getNodes(nil, att, val) = nil .
+  eq getNodes((nd(n, notes) ndl), att, val) = 
+      (if notes[att] == val then nd(n, notes) else nil fi) 
+      getNodes(ndl, att, val) .
+
+**** member(edge,edl) >> occurs(edge,edl)
+**** diff(edl,edl') >> lDiff(edl,edl') 
+**** ditto node, ndl
+
+****07may06
+  op getEdge : EdgeList Nat Nat -> EdgeList .
+  eq getEdge(edl ed(src,tgt,notes) edl',src,tgt) = ed(src,tgt,notes) .
+  eq getEdge(edl,src,tgt) = nil [owise] .
+
+  op nodes2natl : NodeList -> NatList .
+  eq nodes2natl(nil) = nil .
+  eq nodes2natl(nd(n, notes) ndl) = n  nodes2natl(ndl) .
+
+**** Structures for generating graph, to help generating new ids
+  sorts Nodes  getNodesResult .
+  op {_,_} : NodeList Nat -> Nodes .
+  op {_,_} : Nodes  NatList -> getNodesResult .
+
+endfm
+
+**** load graph2lola
+**** loadmaude loaded graph-io.maude
+fmod GRAPH-IO is
+  inc GRAPH .
+  inc NOTES-IO .
+
+**** showing and parsing a Node (at token level)
+
+  vars nid src tgt : Nat .
+  vars tok tok' : Qid .
+  vars toks toks0 toks1 toks2 toks3 toks4 toks5 : QidList .
+  var id : String .
+  var notes : Notes .
+  var node : Node .
+  var edge : Edge .
+  var ndl : NodeList .
+  var edl : EdgeList .
+  vars b b0 b1 b2 : Bool .
+
+
+****  op  graph  :  String  Notes  NodeList   EdgeList  ->  Graph  .
+
+  op showNode : Node -> QidList  .
+  eq showNode(nd(nid,notes)) = 
+         '`( 'node qid(string(nid,10)) showNotes(notes) '`) .
+
+  ops showNodeList showNodeListX : NodeList -> QidList .
+  eq showNodeList(ndl) = '`( 'nodelist showNodeListX(ndl) '`) .
+  eq showNodeListX(nil) = nil .
+  eq showNodeListX(node ndl) = showNode(node) showNodeListX(ndl) .
+
+  op parseNode : QidList -> NodeList .
+  eq parseNode('`( 'node tok toks '`)) =
+      (if rat(string(tok),10) :: Nat and parseNotes(toks) :: Notes
+       then nd(rat(string(tok),10), parseNotes(toks))
+       else nil fi) .
+
+   op parseNodeList : QidList -> NodeList .
+   op parseNodeListX : QidList NodeList -> NodeList .
+   eq parseNodeList('`( 'nodelist toks '`)) = parseNodeListX(toks,nil) .
+   ceq parseNodeListX(toks,ndl) = 
+        (if b 
+         then parseNodeListX(toks1,ndl parseNode(toks0))
+         else ndl
+         fi ) 
+     if {b,toks0,toks1} := splitParen(toks) .
+  
+   eq parseNodeListX(nil,ndl) = ndl .
+
+   
+  op showEdge : Edge -> QidList .
+  eq showEdge(ed(src,tgt,notes)) = 
+      '`( 'edge qid(string(src,10)) qid(string(tgt,10)) showNotes(notes) '`) .
+
+  ops showEdgeList showEdgeListX : EdgeList -> QidList .
+  eq showEdgeList(edl) = '`( 'edgelist showEdgeListX(edl) '`) .
+  eq showEdgeListX(nil) = nil .
+  eq showEdgeListX(edge edl) = showEdge(edge) showEdgeListX(edl) .
+
+  op parseEdge : QidList -> EdgeList .
+  eq parseEdge('`( 'edge tok tok' toks '`)) =
+      (if rat(string(tok),10) :: Nat and rat(string(tok'),10) :: Nat
+           and parseNotes(toks) :: Notes
+       then ed(rat(string(tok),10), rat(string(tok'),10), parseNotes(toks))
+       else nil fi) .
+
+   op parseEdgeList : QidList -> EdgeList .
+   op parseEdgeListX : QidList EdgeList -> EdgeList .
+   eq parseEdgeList('`( 'edgelist toks '`)) = parseEdgeListX(toks,nil) .
+   ceq parseEdgeListX(toks,edl) = 
+          (if b 
+           then parseEdgeListX(toks1,edl parseEdge(toks0))
+           else edl
+           fi) 
+     if {b,toks0,toks1} := splitParen(toks) .
+  
+   eq parseEdgeListX(nil,edl) = edl .
+
+
+  op showGraph : Graph -> QidList  .
+  eq showGraph(graph(id,notes,ndl,edl)) =
+    '`( 'graph qid(id)  showNotes(mt) showNodeList(ndl) showEdgeList(edl) '`) .
+**** '`( 'graph qid(id)  showNotes(notes) showNodeList(ndl) showEdgeList(edl) '`) .
+
+  op parseGraph : QidList -> Graph .
+  ceq parseGraph('`( 'graph tok toks '`)) =
+          graph(string(tok), notes, ndl, edl) 
+      if {b0,toks0,toks1} := splitParen(toks)
+      /\ notes := (if b0 then parseNotes(toks0) else mt fi)
+      /\ {b1,toks2,toks3} := splitParen(toks1)
+      /\ ndl := (if b1 then parseNodeList(toks2) else nil fi)
+      /\ {b2,toks4,toks5} := splitParen(toks3)
+      /\ edl := (if b2 then parseEdgeList(toks4) else nil fi) .
+
+endfm  
+
+**** loadmaude loaded gval.maude
+fmod GVAL is 
+  inc GRAPH .
+  inc VAL .
+
+  sort GVal .
+  subsort GVal < Val .
+  op gv : Graph -> GVal .
+  eq compat(x:GVal,y:GVal) = true .
+
+  var graph : Graph .
+  op gvalGraph : GVal -> Graph .
+  eq gvalGraph(gv(graph)) = graph .
+
+
+endfm
+
+
+
+**** loadmaude loaded gval-io.maude
+
+fmod GVAL-IO is
+  inc GVAL .
+  inc GRAPH-IO .
+
+  var qidl : QidList .
+  var graph : Graph .
+  eq showVal(gv(graph)) = '`( 'gval showGraph(graph) '`) .
+  eq parseVal( '`( 'gval qidl '`) ) = gv(parseGraph(qidl)) .
+  
+endfm
+
+**** loadmaude loaded mval-io.maude
+
+fmod MVAL is 
+  inc META-LEVEL .
+  inc VAL .
+
+  sort MVal .
+  subsort MVal < Val .
+  op mv : Module -> MVal .
+  eq compat(x:MVal,y:MVal) = true .
+
+  var mod : Module .
+  op mvalModule : MVal -> Module .
+  eq mvalModule(mv(mod)) = mod .
+
+endfm
+
+fmod MVAL-IO is
+  inc MVAL .
+  inc VAL-IO .
+
+  var qidl : QidList .
+  var mod : Module .
+  var res?? : [ResultPair?] .
+  eq showVal(mv(mod)) =
+       '`( 'mval metaPrettyPrint(['META-LEVEL], upTerm(mod),none) '`) .
+  ceq parseVal( '`( 'mval qidl '`) ) =
+         (if res?? :: ResultPair 
+          then mv(downTerm(getTerm(res??),['BOOL]))
+          else mv(['BOOL]) fi) 
+     if res?? := metaParse(['META-LEVEL],qidl,'Module) .
+
+endfm
+
+***(
+fmod F is sort Foo . op f : -> Foo . endfm
+red metaParse(['META-LEVEL], metaPrettyPrint(['META-LEVEL], upTerm(upModule('F,false)),none), 'Module) .
+)
+
+**** loadmaude loaded sexp.maude
+***(
+An sexpression is an atom or a list of sexpressions
+Atoms include coerced strings a("abc")
+Note that while "a_b" is a valid string, and string2qids 
+produces qids such as 'a_b with out complaint,
+reading this string via the loopmode tokenizer is a problem.
+)
+
+
+fmod SEXP is
+  inc STRING .
+  sorts  SAtom Sexp SexpL .
+
+  subsort SAtom < Sexp . 
+  subsort Sexp < SexpL .
+  op nil : -> SexpL [ctor] .
+  op __ : SexpL SexpL -> SexpL [ctor assoc id: nil ] .
+  op `[_`] : SexpL -> Sexp  [ctor] .
+
+  op a : String -> SAtom [ctor] .
+
+**** for parsing
+  sort Sexp? .
+  subsort Sexp < Sexp? .
+  op notSexp : -> Sexp? .
+
+  var sexp : Sexp .
+  var sexpl : SexpL .
+  var sym : String .
+
+  ops car cdr : Sexp -> Sexp .
+  eq car([sexp sexpl]) = sexp .
+  eq car(sexp) = sexp [owise] .
+
+  eq cdr([sexp sexpl]) = [sexpl] .
+  eq cdr(sexp) = [nil] [owise] .
+
+  op sexp2l : Sexp -> SexpL .
+  eq sexp2l([sexpl]) = sexpl .
+  eq sexp2l(sexp) = nil [owise] .
+
+  op carl : SexpL -> Sexp .
+  eq carl(nil) = [nil] .
+  eq carl(sexp sexpl) = sexp .
+
+  op cdrl : SexpL -> SexpL .
+  eq cdrl(nil) = nil .
+  eq cdrl(sexp sexpl) = sexpl .
+
+  op tag : Sexp -> String .
+  eq tag([a(sym) sexpl])  =  sym .
+  eq tag(sexp)  = "" [owise] .
+
+  op atm2str : Sexp -> String .
+  eq atm2str(a(sym)) = sym .
+  eq atm2str(sexp) = "" [owise] .
+
+endfm
+
+***(
+Atoms are 
+  strings wo special chars ()" or white space
+  or
+  any chars enclosed in matching ""s
+    (escaped "s inside string converted to ")
+
+  what about (1 ab "c")   
+  call this mall formed or consider " a separator
+
+)
+
+
+fmod PARSE-SEXP-STRING is
+  inc SEXP .
+
+  op rightParen : -> Sexp? .
+
+  sort IxTok .
+  op tok : FindResult String -> IxTok .
+
+  sort IxSexp .
+  op ixs : FindResult Sexp? -> IxSexp .
+
+  vars start stop : Nat .
+  vars str tstr accum accum' avoid want : String .
+  var next : FindResult .
+  var sexp? : Sexp? .
+  var sl : SexpL .
+
+  op whiteSpace : -> String .
+  eq whiteSpace = " " .
+
+
+  op string2Sexp : String -> Sexp .
+  ceq string2Sexp(str) =
+        (if next :: Nat and sexp? :: Sexp 
+         then sexp?
+         else [nil] 
+         fi)
+  if ixs(next,sexp?) := readSexp(str,0,length(str)) .
+
+**** find first position in str, from start, that is not in avoid
+****            src   avoid  start stop       
+  op findNon : String String Nat Nat -> FindResult .
+  eq findNon(str,avoid,start,stop) =
+       (if start >= stop
+        then notFound
+        else (if find(avoid,substr(str,start,1),0) == notFound
+              then start
+              else findNon(str,avoid,s start,stop)
+              fi) fi) .
+
+**** find first position in str, from start,  in want
+**** return stop if not found
+  op findNext : String String Nat Nat -> Nat .
+  eq findNext(str,want,start,stop) =
+       (if start >= stop
+        then stop
+        else (if find(want,substr(str,start,1),0) == notFound
+              then findNext(str,want,s start,stop)
+              else start
+              fi) fi) .
+
+
+**** stop is index after last char of interest
+**** returns (fr,tok) fr is either notFound or pos in str after tok
+  op nextTok : String Nat Nat ->  IxTok .
+  ceq nextTok(str,start,stop) =
+      (if next :: Nat
+       then nextTok1(str,next,stop)
+       else tok(notFound,"")
+       fi) 
+  if  next := findNon(str,whiteSpace,start,stop) .
+  
+**** assumes str[start] is non-white
+**** token is "(" ")" or non white start of atom
+
+****                           str  start stop
+  ops nextTok1 strTok atmTok : String Nat Nat ->  IxTok .
+  eq nextTok1(str,start,stop) =  
+       (if (substr(str,start,1) == "(" or substr(str,start,1) == ")")
+       then  tok(s start,substr(str,start,1))
+       else (if (substr(str,start,2) == "`(" or substr(str,start,2) == "`)")
+             then  tok(s s start,substr(str,s start,1))
+       else (if substr(str,start,1) == "\""
+****             then strTok(str,s start,stop, "\"")
+             then strTok(str,s start,stop, "")
+             else atmTok(str, s start,stop, substr(str,start,1))
+             fi ) fi) fi) .
+
+
+  ops strTok atmTok : String Nat Nat String ->  IxTok .
+**** start is inside str quote,  looking for close quote, skip "\\\""
+  ceq strTok(str,start,stop,accum) =  
+        (if (next :: Nat)
+         then (if next == start
+               then tok(s next, accum')
+               else (if (substr(str,sd(next,1),1) == "\\")
+                     then strTok(str, s next, stop, accum')
+                     else tok(s next, accum')
+                     fi) fi)
+         else tok(notFound,"")
+         fi)
+  if next := find(str,"\"",start) 
+  /\  accum' := (if next :: Nat
+                 then accum + substr(str,start,  sd(next,start)) 
+                 else accum fi) .
+
+**** inside a simple atom, terminate with () or whitespace
+  ceq atmTok(str,start,stop,accum) =  
+        tok(next,accum')
+  if next := findNext(str,"()`" + whiteSpace,start,stop) 
+  /\  accum' := accum + substr(str,start, sd(next,start)) .
+
+**** read Sexp from str starting at start 
+**** nextToken returns tok(i,"(", ")", sym, or string), or tok(notFound,"")
+
+  op readSexp : String Nat Nat -> IxSexp .
+  ceq readSexp(str,start,stop) =
+       (if next :: Nat
+        then (if tstr == "("
+              then readSexpL(str,next,stop,nil)
+              else (if tstr == ")"
+                    then ixs(next,rightParen)
+                    else ixs(next,a(tstr))
+                    fi)
+              fi)
+        else ixs(next,notSexp)
+        fi)
+    if tok(next,tstr) := nextTok(str,start,stop) .
+
+**** read Sexps until matching ")" found
+  op readSexpL : String Nat Nat SexpL -> IxSexp .
+  ceq readSexpL(str,start,stop,sl) =
+       (if start >= stop or not(next :: Nat)
+        then ixs(notFound,notSexp)
+        else (if sexp? == rightParen
+              then ixs(next, [sl])
+              else readSexpL(str,next,stop, (sl sexp?))
+              fi) fi)
+  if ixs(next,sexp?) := readSexp(str,start,stop) .
+
+
+***(
+
+read sexp
+  if next tok is '( or '`( then read SexpL starting after the tok
+  ow return a(string(tok))
+  
+read sexpl  str start stop currsexpl
+  if next tok is ') then return currsexpl
+  ow read sexp -> (newstart sexp)
+     readsexpl(str,newstart,stop, ( currsexpl sexp))
+
+
+" abc "
+
+)
+endfm
+
+fmod PARSE-SEXP-QIDS is
+  inc SEXP .
+  inc QID-LIST .
+  inc CONVERSION .
+
+
+  sort SexpErr .
+  ops noRP RP parseOK noToks : -> SexpErr .
+
+  sort SexpParseQResult .
+  op {_`,_`,_} : Sexp? QidList SexpErr  -> SexpParseQResult .
+
+  vars qs qs' : QidList .
+  var q : Qid .
+  var sexp? : Sexp? .
+  var sexp : Sexp .
+  var sexpl : SexpL .
+  var serr : SexpErr .
+  var str : String .
+
+  op qids2spqr : QidList -> SexpParseQResult .
+  op qids2lpqr : QidList SexpL -> SexpParseQResult .
+
+  eq qids2spqr(nil) = {notSexp, nil, noToks} .
+  eq qids2spqr( '`( qs) =  qids2lpqr(qs,nil) .
+  eq qids2spqr( '`) qs) = {notSexp, qs, RP} .
+  eq qids2spqr(q qs) = {a(string(q)), qs, parseOK} .
+
+  eq qids2lpqr(nil,sexpl) = {[sexpl],nil,noRP} .
+  eq qids2lpqr( '`) qs, sexpl) = {[sexpl], qs, parseOK} .
+
+  ceq qids2lpqr(q qs, sexpl) = 
+        (if (sexp? :: Sexp and serr == parseOK)
+         then qids2lpqr(qs', sexpl sexp?)
+         else {[sexpl], qs', serr}
+         fi)               
+      if {sexp?,qs',serr} := qids2spqr(q qs)  [owise] .
+
+  op sexp2qids : Sexp -> QidList .
+  op sexpl2qids : SexpL -> QidList .
+
+  eq sexp2qids(a(str)) = qid(str) .
+  eq sexp2qids([sexpl]) = '`( sexpl2qids(sexpl) '`) .
+  eq sexpl2qids(nil) = nil .
+  eq sexpl2qids(sexp sexpl) = sexp2qids(sexp) sexpl2qids(sexpl) .
+
+endfm
+
+***(
+fmod TEST-SEXP is
+  inc PARSE-SEXP-STRING .
+  inc PARSE-SEXP-QIDS .
+  inc NAT-QID .
+
+  ops sx1 sx2 sx3 sx : -> Sexp .
+  ops qx1 qx2 qx3 qx : -> QidList .
+  ops str1 str2 str3 str : -> String .
+
+  eq sx1 = a("abc") .
+  eq sx2 = [sx1 [nil]] .
+  eq sx3 = [sx2 a("qqq")] .
+  eq sx = [sx1 sx2 sx3] .
+
+  eq qx1 = sexp2qids(sx1) .
+  eq qx2 = sexp2qids(sx2) .
+  eq qx3 = sexp2qids(sx3) .
+  eq qx  = sexp2qids(sx) .
+
+  eq str1 = qidl2str(qx1) .
+  eq str2 = qidl2str(qx2) .
+  eq str3 = qidl2str(qx3) .
+  eq str  = qidl2str(qx) . 
+
+endfm
+)
+***(
+
+red sx1 .
+red sx2 .
+red sx3 .
+red sx .
+
+red qx1 .
+red qx2 .
+red qx3 .
+red qx .
+
+red str1 .
+red str2 .
+red str3 .
+red str .
+
+red qids2spqr(qx1) .
+red qids2spqr(qx) .
+
+red readSexp(str1,0,length(str1)) .
+red readSexp(str,0,length(str)) .
+
+)
+**** loadmaude loaded sxval.maude
+fmod SXVAL is 
+  inc SEXP .
+  inc VAL .
+
+  sort SxVal .
+  subsort SxVal < Val .
+  op sxv : Sexp -> SxVal .
+  eq compat(x:SxVal,y:SxVal) = true .
+
+  var sexp : Sexp .
+  op sxvalSexp : SxVal -> Sexp .
+  eq sxvalSexp(sxv(sexp)) = sexp .
+
+
+endfm
+
+
+
+**** loadmaude loaded sxval-io.maude
+
+fmod SXVAL-IO is
+  inc SXVAL .
+  inc PARSE-SEXP-QIDS .
+  inc VAL-IO .
+
+  var qidl toks : QidList .
+  var sexp : Sexp .
+  var sexp? : Sexp? .
+  var sexpl : SexpL .
+  var serr : SexpErr .
+
+  eq showVal(sxv(sexp)) = '`( 'sxval sexp2qids(sexp) '`) .
+  ceq parseVal( '`( 'sxval qidl '`) ) = sxv(sexp) 
+  if {sexp?, toks,serr} := qids2spqr(qidl)
+  /\ sexp := if parseOK == serr then sexp? else [nil] fi .
+
+endfm
+
+

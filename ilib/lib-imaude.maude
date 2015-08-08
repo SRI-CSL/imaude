@@ -1,0 +1,2116 @@
+**** assumes pla-util loaded
+
+fmod UTIL is
+  inc NAT-QID .  
+  inc STRING-OUTPUT-HACK .
+endfm
+
+**** loadmaude loaded idata.maude
+*******************************  idata.maude  *******************************
+**** requires val.maude notes.maude mset.maude natqid.maude
+***(
+**** requests now have type,EVal,RequestQ components
+
+The datatypes IMaude uses to represent its state are
+  Val  -- a union type of sorts used to remember information
+        builtin components are TVal (terms), QVal (qidlists), and SVal (strings)
+  Request -- specifies a task,  used to enable interaction without blocking
+        -- each input is either handled immediatialy or results in zero
+        -- or more requests being queued
+  Wait4 -- specifies what to do with input from other actors via requests
+        -- either becuase its been requested, or because we've
+        -- agreed to listen to requests from that actor.
+        -- used to serialize interactions with other actors
+  Entry  -- a local environment element, associating typed entry names and possibly
+         -- additional parameters,  to a value. An entry also has a notes field
+  LogItem -- error or status information for the user
+
+an IMaude state has the form 
+    st(ctl,w4,reqQ,es,log)
+where
+   ctl : Control is either ready or processing(req)
+   w4  : Wait4Set ~~ MSet{Wait4}
+   reqQ  : RequestQ ~~ List{Request}
+   es  : EntrySet ~~ MSet{Entry}
+   log : Log ~~ List{LogItem}
+)
+
+******************************************************************************
+***  Values
+***
+***  Each EVal subsort must provide constructors and printers
+***  (definition of showEVal for the subsort)
+***  meta values (mod,term)  and qidlist values are builtin
+***  others can be added by need.
+***
+******************************************************************************
+
+**** EVAL  dummy : -> Val , undefined : -> [Val] .
+
+fmod EVAL is
+  inc QVAL .
+  inc TVAL .
+  inc SVAL .
+  inc UTIL .
+
+
+*** EVal >> Val
+***  QEVal >> QVal
+*** op getQEVQs : QEVal -> QidList >>  qvalQidlist
+*** TermEVal >> TVal
+***  op  isTermEV : EVal -> Bool .        --- v :: TVal .
+***  op getTEVMod : TermEVal -> Qid .     --- tvalModname
+***  op getTEVTerm : TermEVal -> Term .   --- tvalTerm
+ 
+endfm
+
+
+fmod REQUEST is
+  sort Request .
+endfm
+
+view Request from TRIV to REQUEST is
+  sort Elt to Request .
+endv
+
+fmod REQUESTS is
+  inc EVAL .
+  inc LIST{Request} *
+       (sort List{Request} to RequestQ, sort NeList{Request} to NeRequestQ ) .
+
+  op req : Qid  Val RequestQ -> Request [ctor] .
+  op creq : Qid QidList Val RequestQ -> Request [ctor] .
+
+  var rname : Qid .
+  vars pars pars' : QidList .
+  var eval : Val .
+  vars reqQ reqQ' : RequestQ .
+  var ?req ?req1 : Request .
+
+  op reqQid  : Request -> Qid .
+  op reqVal : Request -> Val .
+  op reqQids : Request -> QidList .
+  op reqReqQ   : Request -> RequestQ .
+
+  eq reqQid(req(rname,eval,reqQ)) = rname .
+  eq reqVal(req(rname,eval,reqQ)) = eval .
+  eq reqReqQ(req(rname,eval,reqQ)) = reqQ .
+  eq reqQids(req(rname,eval,reqQ)) = nil .
+
+  eq reqQid(creq(rname,pars,eval,reqQ)) = rname .
+  eq reqVal(creq(rname,pars,eval,reqQ)) = eval .
+  eq reqReqQ(creq(rname,pars,eval,reqQ)) = reqQ .
+  eq reqQids(creq(rname,pars,eval,reqQ)) = pars .
+
+
+  op supplyPars : RequestQ QidList -> RequestQ .
+  eq supplyPars(nil,pars) = nil .
+  eq supplyPars((req(rname,eval,reqQ') reqQ), pars) = 
+        (req(rname,supplyPars(eval,pars),reqQ')  supplyPars(reqQ, pars)) .
+  eq supplyPars((creq(rname,pars',eval,reqQ') reqQ), pars) = 
+        (creq(rname,pars' pars,eval,reqQ') supplyPars(reqQ, pars)) .
+
+  op supplyPars : Val QidList -> Val .
+  eq supplyPars(ql(pars'),pars) = ql(pars' pars) .
+  eq supplyPars(eval,pars) = eval [owise] .
+
+endfm
+
+fmod CONTROL is
+  inc REQUESTS .
+
+  sort Control .
+  op  ready : -> Control [ctor] .
+  op  processing  : Request -> Control  [ctor] .
+
+
+endfm
+
+******************************************************************************
+***  Wait4s and Wait4 sets
+******************************************************************************
+
+**** expected replies from requests to other actors, or listenees
+fmod WAIT4 is
+  inc REQUESTS .
+  sort Wait4 .
+  op wait4 : Qid QidList RequestQ -> Wait4 [ctor] .
+
+  var aname : Qid .
+  var toks : QidList .
+  var reqQ : RequestQ .  
+
+  op wait4Aname : Wait4 -> Qid .
+  op wait4Qids : Wait4 -> QidList .
+  op wait4ReqQ : Wait4 -> RequestQ .
+
+  eq wait4Aname(wait4(aname,toks,reqQ)) = aname .
+  eq wait4Qids(wait4(aname,toks,reqQ)) =  toks .
+  eq wait4ReqQ(wait4(aname,toks,reqQ)) =  reqQ .
+
+endfm
+
+view Wait4 from TRIV to WAIT4 is
+  sort Elt to Wait4 .
+endv
+
+fmod WAIT4SET is
+  inc MSET{Wait4} *
+       (sort MSet{Wait4} to Wait4Set, sort NeMSet{Wait4} to NeWait4Set) .
+
+  var wait4s : Wait4Set .
+  var aname : Qid .
+  var reqQ : RequestQ .  
+  var toks : QidList .
+
+  op waiting4 : Wait4Set Qid -> Bool .
+  eq waiting4(wait4(aname, toks,reqQ) ! wait4s, aname) = true .
+  eq waiting4(wait4s, aname) = false [owise] .
+
+endfm
+
+
+******************************************************************************
+***  Log items and Logs
+******************************************************************************
+fmod LOG-ITEM is
+  inc EVAL .
+
+  sort LogItem .
+  op log : Qid QidList Val -> LogItem [ctor] .
+
+  var type : Qid .
+  var toks : QidList .
+  var eval : Val .
+
+  op logQid : LogItem -> Qid .
+  op logQids : LogItem -> QidList .
+  op logVal : LogItem -> Val .
+
+  eq logQid(log(type, toks, eval)) = type .
+  eq logQids(log(type, toks, eval)) = toks .
+  eq logVal(log(type, toks, eval)) = eval .
+endfm
+
+view LogItem from TRIV to LOG-ITEM is
+  sort Elt to LogItem .
+endv
+
+fmod LOG is
+  inc LIST{LogItem} *
+       (sort List{LogItem} to Log, sort NeList{LogItem} to NeLog) .
+
+endfm
+
+
+******************************************************************************
+***  Local environment entries
+****** ****** ****** ****** ****** ****** ****** ****** ****** ****** 
+****  Entries -- e(etype,ql(name ids),notes, eval)
+****  etype is a qid that identifies the entry type 
+****  one of 'qval 'sval 'tval ....
+****  (name ids) is a qidlist that names the value, 
+****     ids are additional parameters to allow for named families of values
+****    or to record creation parameters ...
+******************************************************************************
+
+fmod ENTRY is
+  inc EVAL .
+  inc QSTNOTES .
+
+  sort Entry .
+  op e : Qid QidList Notes Val -> Entry [ctor] .
+
+  var etype : Qid .
+  vars ids eids : QidList .
+  var ev : Val .
+  var entry : Entry .
+
+  var notes : Notes .
+  var tv : TVal .
+  var qv : QVal .
+  var sv : SVal .
+  
+  op e : Qid QidList Val -> Entry  .
+  eq e(etype,ids,ev)  = e(etype, ids, mt, ev) .
+
+  op entryType  : Entry -> Qid .
+  op entryIds   : Entry -> QidList .
+  op entryNotes : Entry -> Notes .
+  op entryVal   : Entry -> Val .
+
+  eq entryType(e(etype, ids, notes, ev)) = etype .
+  eq entryIds(e(etype, ids,notes, ev)) = ids .
+  eq entryNotes(e(etype, ids,notes, ev)) = notes .
+  eq entryVal(e(etype, ids,notes, ev)) = ev .
+
+  sort Entry? .
+  subsort Entry < Entry? .
+  op noEntry : -> Entry? .
+
+endfm
+
+view Entry from TRIV to ENTRY is
+  sort Elt to Entry .
+endv
+
+fmod ESET is
+  inc MSET{Entry} *
+       (sort MSet{Entry} to ESet, sort NeMSet{Entry} to NeESet) .
+
+  vars etype tok modname : Qid .
+  vars ids eids newids : QidList .
+  var  val : Val .
+  vars entry  : Entry .
+  vars es es'  e?  : ESet .
+  vars notes notes' : Notes .
+  var tv : TVal .
+  var qv : QVal .
+  var sv : SVal .
+
+****************************** OP DECLS ******************************
+  op getEntry : ESet Qid QidList -> ESet .
+  op getEntryD : ESet Qid QidList Entry -> Entry .
+  op removeEntry : ESet Qid QidList -> ESet .  
+  op addEntry : ESet Qid QidList Notes Val  -> ESet .
+  op addEntry : ESet Qid QidList Val  -> ESet .
+  op addESet : ESet ESet -> ESet .
+  op copyEntry : ESet Qid QidList QidList -> ESet . 
+  op getVal : ESet Qid QidList Val -> Val .
+**** refining sorts
+  op getVal : ESet Qid QidList TVal -> TVal .
+  op getVal : ESet Qid QidList QVal -> QVal .
+  op getVal : ESet Qid QidList SVal -> SVal .
+
+  op getNotes : ESet Qid QidList -> Notes .
+  op getNote : ESet Qid Qid QidList -> Val .
+  op updateNotes : ESet Qid QidList Notes -> ESet .
+  op esetSummary : ESet -> QidList .
+
+**************************** END OP DECLS ******************************
+
+
+**** now that we have notes an entry should be uniquely identified by
+**** etype ids
+****  op getEntry : ESet Qid QidList -> ESet .
+  eq getEntry((e(etype, ids, notes, val) ! es), etype, ids) 
+       = e(etype, ids, notes, val) .
+  eq getEntry(es, etype, ids) =  mt [owise] .
+
+****  op getEntryD : ESet Qid QidList Entry -> Entry .
+  eq getEntryD(es, etype, ids, entry) =
+       (if getEntry(es, etype, ids) :: Entry
+        then getEntry(es, etype, ids)
+        else entry fi)  .
+
+
+*** uses exact ids match, assume at most one entry for each etype,ids
+****  op removeEntry : ESet Qid QidList -> ESet .  
+****  op addEntry : ESet Qid QidList Notes Val  -> ESet .
+****  op addEntry : ESet Qid QidList Val  -> ESet .
+  eq removeEntry(mt, etype, ids) = mt .
+  eq removeEntry((e(etype,ids, notes,val) ! es), etype, ids) = es .
+  eq removeEntry(es, etype, ids) = es [owise] .
+
+**** default to mt notes
+  eq addEntry(es, etype, ids, val) =  addEntry(es, etype, ids, mt, val) .
+  eq addEntry(es, etype, ids, notes, val) = 
+        ( removeEntry(es, etype, ids) ! e(etype, ids, notes, val) ) .
+
+**** second eset is preferred
+****  op addESet : ESet ESet -> ESet .
+  eq addESet(es,mt) = es .
+  eq addESet(es, e(etype,ids,notes,val) ! es') = 
+      addESet(addEntry(es, etype,ids,notes,val), es') .
+
+****  op copyEntry : ESet Qid QidList QidList -> ESet . 
+  ceq copyEntry(es,etype, ids,newids) =
+        (if e? :: Entry 
+         then addEntry(es,etype,newids,entryNotes(e?),entryVal(e?))
+         else es
+         fi)
+  if e? := getEntry(es,etype,ids) .
+
+****  op getVal : ESet Qid QidList Val -> Val .
+  eq getVal(es, etype, ids ,val) =
+        (if getEntry(es,etype, ids)  :: Entry  
+         then (if compat(entryVal(getEntry(es,etype, ids)),val)
+               then entryVal(getEntry(es,etype, ids) )
+               else val
+               fi)
+         else val
+         fi) .
+
+
+****  op getNotes : ESet Qid QidList -> Notes .
+  eq getNotes(es, etype, ids ) =
+        (if getEntry(es,etype, ids)  :: Entry  
+         then entryNotes(getEntry(es,etype, ids) )
+         else mt
+         fi) .
+
+****  op getNote : ESet Qid Qid QidList -> Val .
+  eq getNote(es,tok, etype, ids ) =
+         lookupd(getNotes(es,etype, ids),string(tok),dummy) .
+
+
+
+****  op updateNotes : ESet Qid QidList Notes -> ESet .
+  eq updateNotes((e(etype, ids, notes, val) ! es), etype, ids, notes') =
+        (e(etype, ids, notes', val) ! es) .
+  eq updateNotes(es, etype, ids, notes') = es [owise] .
+
+****  op esetSummary : ESet -> QidList .
+  eq esetSummary(mt) = nil .
+  eq esetSummary((entry ! es)) = 
+     ( entryType(entry) entryIds(entry) '\n esetSummary(es) ) .
+
+
+endfm
+
+fmod IDATA is
+ inc CONTROL .
+ inc WAIT4SET .
+ inc LOG .
+ inc ESET .
+endfm
+
+
+**** loadmaude loaded idata-io.maude
+fmod EVAL-IO is
+  inc EVAL .
+  inc QSTVAL-IO .
+endfm
+
+fmod REQUESTS-IO is
+  inc REQUESTS .
+  inc EVAL-IO .
+
+  var rname : Qid .
+  vars qidl pars toks toks0 toks1 toks2 toks3 toks4 toks5  : QidList .
+  var eval val : Val .
+  vars ?req ?req1 : Request .
+  var reqQ : RequestQ .
+  vars b b0 b1 : Bool .
+
+  op showRequest : Request -> QidList .
+  eq showRequest(req(rname,eval,reqQ)) = 
+       '`( 'request 'req rname 
+              '\n '\t showVal(eval)  
+              '\n '\t showRequestQ(reqQ) '`) .
+
+  eq showRequest(creq(rname,pars,eval,reqQ)) = 
+       '`( 'request 'creq rname 
+             '\n '\t '`( 'qidlist pars '`)
+             '\n '\t showVal(eval) 
+             '\n '\t showRequestQ(reqQ) '`) .
+
+  op parseRequest : QidList -> RequestQ .
+  ceq parseRequest( '`( 'request 'req rname qidl '`) ) =
+    (if b0 then req(rname,val,reqQ) else nil fi)
+    if {b,toks0,toks1} := splitParen(qidl)
+    /\ val := (if b then parseVal(toks0) else dummy fi)
+    /\ {b0,toks2,toks3} := splitParen(toks1)
+    /\ reqQ := (if b0 then parseRequestQ(toks2) else nil fi) .
+
+  ceq parseRequest( '`( 'request 'creq rname qidl '`) ) =
+    (if b1 then creq(rname,pars,val,reqQ) else nil fi)
+    if {b,toks0,toks1} := splitParen(qidl)
+    /\ '`( 'qidlist pars '`) := toks0 
+    /\ {b0,toks2,toks3} := splitParen(toks1)
+    /\ val := parseVal(toks2) 
+    /\ {b1,toks4,toks5} := splitParen(toks3)
+    /\ reqQ := (if b1 then parseRequestQ(toks4) else nil fi) .
+
+  eq parseRequest(qidl) = nil [owise] .
+
+  op showRequestQ : RequestQ -> QidList .
+  op showRequestQX : RequestQ -> QidList .
+
+  eq showRequestQ(reqQ) = '`( 'requestQ showRequestQX(reqQ) '`)  .
+  eq showRequestQX(nil) =  nil  .
+  eq showRequestQX(?req) = showRequest(?req) .
+  eq showRequestQX((?req ?req1 reqQ)) = 
+        showRequest(?req) '\n  showRequestQX(?req1 reqQ) .
+
+  ops parseRequestQ parseRequestQX : QidList -> RequestQ .
+  eq parseRequestQ('`( 'requestQ  toks '`) ) = parseRequestQX(toks) .
+
+  ceq parseRequestQX(toks) =
+    (if b then (reqQ parseRequestQX(toks1) ) else nil fi)
+   if {b,toks0,toks1} := splitParen(toks)
+   /\ reqQ := (if b then parseRequest(toks0) else nil fi) .
+
+endfm
+
+fmod CONTROL-IO  is
+  inc CONTROL .
+  inc REQUESTS-IO .
+
+  var ?req : Request .
+  var qidl : QidList .
+
+  op showControl  : Control -> QidList .
+  eq showControl(ready) = '`( 'control 'ready '`) .
+  eq showControl(processing(?req)) = 
+         '`( 'control 'processing showRequest(?req) '`) .
+
+  op parseControl : QidList -> Control .
+  eq parseControl('`( 'control 'ready '`)) = ready .
+  eq parseControl('`( 'control 'processing qidl '`) ) =
+       (if parseRequest(qidl) :: Request 
+        then processing( parseRequest(qidl) )
+        else ready fi) .
+endfm
+
+fmod WAIT4SET-IO is
+  inc WAIT4SET .
+  inc REQUESTS-IO .
+
+  var wait4s ws : Wait4Set .
+  var aname : Qid .
+  vars toks toks0 toks1 : QidList .
+  var reqQ : RequestQ .  
+  var b : Bool .
+
+**** wait4(aname, toks,reqQ) ! wait4s
+
+  op showWait4 : Wait4 -> QidList .
+  op showWait4s : Wait4Set -> QidList .
+  op showWait4sX : Wait4Set -> QidList .
+
+  eq showWait4(wait4(aname, toks, reqQ)) = 
+          '`( 'wait4 aname '`( 'qidlist toks '`) showRequestQ(reqQ) '`) .
+
+  eq showWait4s(wait4s) = '`( 'wait4s '\n '\t showWait4sX(wait4s) '`) .
+
+  eq showWait4sX(mt) = nil .
+  eq showWait4sX(wait4(aname, toks, reqQ) ! wait4s) = 
+         showWait4(wait4(aname,toks,reqQ)) '\n '\t
+         showWait4sX(wait4s)  .
+
+  ops parseWait4 parseWait4s parseWait4sX : QidList -> Wait4Set .
+
+**** '`( 'wait4 aname '`( 'qidlist toks '`) toks1 '`)  
+  ceq parseWait4('`( 'wait4 aname  toks '`) ) 
+  =  (if b then wait4(aname,toks0,reqQ) else mt fi)
+   if {b,'`( 'qidlist toks0 '`),toks1} := splitParen(toks)
+   /\ reqQ := parseRequestQ(toks1) .
+
+  eq parseWait4(toks) = mt [owise] .
+
+  eq parseWait4s('`( 'wait4s toks '`)) = parseWait4sX(toks) .
+
+  ceq parseWait4sX(toks) =
+        (if b then (ws ! parseWait4sX(toks1)) else mt fi)  
+     if {b,toks0,toks1} := splitParen(toks)
+     /\ ws := (if b then parseWait4(toks0) else mt fi) .
+
+  eq parseWait4s(toks) = mt [owise] .
+
+endfm
+
+fmod LOG-IO is
+  inc EVAL-IO .
+  inc LOG .
+
+  var type : Qid .
+  var toks toks0 toks1 : QidList .
+  var val : Val .
+  vars litem litem1 : LogItem .
+  var lg ls : Log .
+  var b : Bool .
+
+  op showLogItem : LogItem -> QidList .
+  eq showLogItem(log(type, toks, val)) = 
+       '`( 'logitem  type '`( 'qidlist toks '`) showVal(val) '`) .
+
+  ops showLog showLogX : Log -> QidList .
+  eq showLog(lg) = '`( 'log '\n '\t showLogX(lg) '`) .
+  eq showLogX(nil) = nil .
+  eq showLogX(litem) = showLogItem(litem) .
+  eq showLogX(litem litem1 lg) =
+        showLogItem(litem) '\n '\t showLogX(litem1 lg) .
+
+  ops parseLogItem  parseLog parseLogX : QidList -> Log .
+  ceq parseLogItem( '`( 'logitem  type toks  '`) ) =
+     (if b then log(type,toks0,val) else nil fi)
+   if {b,'`( 'qidlist toks0 '`),toks1} := splitParen(toks)
+   /\ val := (if b then parseVal(toks1) else dummy fi) .
+
+
+  eq parseLog('`( 'log toks '`)) = parseLogX(toks) .
+
+  ceq parseLogX(toks) =
+        (if b then (ls parseLogX(toks1)) else nil fi)  
+     if {b,toks0,toks1} := splitParen(toks)
+     /\ ls := (if b then parseLogItem(toks0) else nil fi) .
+
+  eq parseLog(toks) = nil [owise] .
+
+endfm
+
+fmod ESET-IO is
+  inc ESET .
+  inc EVAL-IO .
+  inc NOTES-IO .
+
+  vars etype tok : Qid .
+  vars ids toks toks0 toks1 toks2 toks3 : QidList .
+  var val : Val .  var val? : [Val] .
+  vars entry entry1 : Entry .
+  vars es es' e?  : ESet .
+  vars note : Note .
+  var notes : Notes .
+  var tv : TVal .
+  var qv : QVal .
+  var sv : SVal .
+  vars b b0 : Bool .
+
+
+  op showEntry : Entry -> QidList .
+  eq showEntry(e(etype,ids,notes,val)) = 
+     '`( 'entry etype '`( 'qidlist ids '`) showNotes(notes) showVal(val) '`) .
+  eq showEntry(entry) = nil [owise] .
+
+  ops showESet showESetX : ESet -> QidList .
+  eq showESet(es) = '`( 'eset '\n '\t showESetX(es) '`) .
+  eq showESetX(mt) = nil .
+  eq showESetX(entry) = showEntry(entry) .
+  eq showESetX((entry ! entry1 ! es)) = 
+          showEntry(entry) '\n '\t showESetX(entry1 ! es) .
+
+
+  op parseEntry : QidList -> ESet .
+  ceq parseEntry('`( 'entry etype toks '`)) = 
+       (if b and val? :: Val then e(etype,ids,notes,val?) else mt fi)
+   if {b,'`( 'qidlist ids '`), toks1} := splitParen(toks)
+   /\ {b0,toks2,toks3} := splitParen(toks1)
+   /\ notes := (if b0 then parseNotes(toks2) else mt fi)
+   /\ val? := (if b then parseVal(toks3) else undefined fi) .
+
+  eq parseEntry(toks) = mt [owise] .
+
+**** updates es with any successful parses, drops failures.
+  op parseESet : QidList -> ESet .
+  op parseESet : ESet QidList -> ESet .
+  op parseEntries : ESet QidList -> ESet .
+
+  eq parseESet('`( 'eset toks '`)) = parseEntries(mt,toks) .
+  eq parseESet(es, '`( 'eset toks '`)) = parseEntries(es,toks) .
+  eq parseESet(es,  toks ) = es [owise] .
+
+  ceq parseEntries(es,toks) =
+        (if b then parseEntries(es',toks1) else es fi) 
+   if {b,toks0,toks1} := splitParen(toks)
+    /\ e? := (if b then parseEntry(toks0) else mt fi)
+    /\ es' := (if e? :: Entry 
+               then addEntry(es, entryType(e?), entryIds(e?), 
+                             entryNotes(e?), entryVal(e?)) 
+               else es fi)  .
+endfm
+
+fmod IDATA-IO is
+  inc CONTROL-IO .
+  inc WAIT4SET-IO .
+  inc LOG-IO .
+  inc ESET-IO . 
+
+endfm
+
+
+
+**** loadmaude loaded istate.maude
+
+******************************************************************************
+***   IMaude  state 
+******************************************************************************
+mod IMAUDE-STATE is
+  inc IDATA-IO  .
+  inc LOOP-MODE .
+
+  *** IMaude State
+  op st : Control Wait4Set RequestQ ESet Log -> State [ctor] .
+  op maudePrompt : -> QidList .
+  eq maudePrompt =  '\n 'Maude> '\s .
+
+  var wait4s : Wait4Set .
+  var ctl : Control .
+  var reqQ : RequestQ .
+  vars es es' : ESet .
+  var log : Log .
+
+  var ?req : Request .
+  var ee? : Entry? .
+  vars InQ OutQ ids newids toks : QidList .
+  vars etype fname tag : Qid .
+  var val : Val .
+
+  op stCtl : State -> Control .
+  op stW4s : State -> Wait4Set .
+  op stReqQ : State -> RequestQ .
+  op stEs : State -> ESet .
+  op stLog : State -> Log .
+
+  eq stCtl(st(ctl,wait4s,reqQ,es,log)) = ctl .
+  eq stW4s(st(ctl,wait4s,reqQ,es,log)) = wait4s .
+  eq stReqQ(st(ctl,wait4s,reqQ,es,log)) = reqQ .
+  eq stEs(st(ctl,wait4s,reqQ,es,log)) = es .
+  eq stLog(st(ctl,wait4s,reqQ,es,log)) = log .
+
+**** this maude's actor name
+  op getMaudeName : ESet -> Qid .
+  eq getMaudeName(es) = qvalQidList(getVal(es,'qval,'maudeName,ql('maude))) .
+ 
+
+  *** show the control part of the state
+  op showCState  : Control Wait4Set RequestQ -> QidList .
+  eq showCState(ctl,wait4s,reqQ) =
+	showControl(ctl) '\n
+	showWait4s(wait4s) '\n
+	showRequestQ(reqQ) .
+
+******************************************************************************
+**** for saving
+******************************************************************************
+  op showState : State QidList -> QidList .
+  eq showState(st(ctl,wait4s,reqQ,es,log),'control toks) = showControl(ctl) .
+  eq showState(st(ctl,wait4s,reqQ,es,log),'wait4s toks) = showWait4s(wait4s) .
+  eq showState(st(ctl,wait4s,reqQ,es,log),'requests toks) 
+          = showRequestQ(reqQ) .
+  eq showState(st(ctl,wait4s,reqQ,es,log),'eset toks)  = showESet(es) .
+  eq showState(st(ctl,wait4s,reqQ,es,log),'entry etype toks)
+      = showEntry(getEntry(es,etype,toks)) .
+  eq showState(st(ctl,wait4s,reqQ,es,log),'log toks) = showLog(log) .
+
+  eq showState(st(ctl,wait4s,reqQ,es,log), toks)  = nil [owise] .
+
+******************************************************************************
+**** for restoring  -- only ESet component for now
+******************************************************************************
+  op parseRestored :  State QidList -> State .
+  eq parseRestored(s:State, 'content fname toks)
+       = parseRestoredX(s:State,toks) .
+  eq parseRestored(s:State, toks) = s:State [owise] .
+
+  op parseRestoredX :  State QidList -> State .
+  eq parseRestoredX(st(ctl,wait4s,reqQ,es,log), toks) 
+        = st(ctl,wait4s,reqQ,parseESet(es,toks),log) .
+       
+
+
+   op init : -> System .
+
+  ****                        ctl   w4s reqQ es log
+  rl[ini]:  init => [ nil, st(ready, mt, nil, mt, nil), nil ] .
+
+******************************************************************************
+**** Invariants
+**** if e(tval,ids,notes,val) in es then val is wellFormed 
+**** mainly a concern for TVal
+
+******************************************************************************
+**** convention
+**** (show ....) prints text in interaction window
+**** defines generic user commands with immediate handling
+**** Commands are
+***(
+  show [control | wait4s | requests | eset | log | summary | cstate]
+  show entry etype ids
+  show val etype ids
+  show notes etype ids
+  show note tag etype ids
+  remove entry etype ids
+  copy entry etype ( newids ) oldids
+  reset [control | wait4s | requests | entries | log | all ]
+)
+
+******************************************************************************
+*** control management
+******************************************************************************
+
+*** (show control)
+  rl[show.control]:
+  ['show 'control InQ, st(ctl,wait4s,reqQ,es,log), OutQ ]
+   =>
+  [nil,  st(ctl,wait4s,reqQ,es,log), OutQ
+      'user '\n getMaudeName(es) '\n  showControl(ctl) maudePrompt ] .
+
+*** (reset control)
+  rl[reset.control]:
+  ['reset 'control InQ,  st(ctl,wait4s,reqQ,es,log), OutQ ]
+   =>
+  [nil, st(ready,wait4s,reqQ,es,log), OutQ
+      'user '\n getMaudeName(es) '\n  'reset-control-ok maudePrompt ] .
+
+******************************************************************************
+*** wait4 management
+******************************************************************************
+
+*** (show wait4s)
+  rl[show.wait4s]:
+  ['show 'wait4s InQ, st(ctl,wait4s,reqQ,es,log), OutQ ]
+   =>
+  [nil,  st(ctl,wait4s,reqQ,es,log), OutQ
+      'user '\n getMaudeName(es) '\n  showWait4s(wait4s) maudePrompt ] .
+
+*** (reset wait4s)
+  rl[reset.wait4s]:
+  ['reset 'wait4s InQ,  st(ctl,wait4s,reqQ,es,log), OutQ ]
+   =>
+  [nil, st(ctl,mt,reqQ,es,log), OutQ
+      'user '\n getMaudeName(es) '\n  'reset-wait4s-ok maudePrompt ] .
+
+
+******************************************************************************
+*** request management
+******************************************************************************
+
+*** (show requests)
+  rl[show.requests]:
+  ['show 'requests InQ, st(ctl,wait4s,reqQ,es,log), OutQ ]
+   =>
+  [nil,  st(ctl,wait4s,reqQ,es,log), OutQ
+      'user '\n getMaudeName(es) '\n  showRequestQ(reqQ) ] .
+
+*** (reset requests)
+  rl[reset.requests]:
+  ['reset 'requests InQ,  st(ctl,wait4s,reqQ,es,log), OutQ ]
+   =>
+  [nil, st(ctl,wait4s,nil,es,log), OutQ
+      'user '\n getMaudeName(es) '\n  'reset-requests-ok maudePrompt ] .
+
+
+******************************************************************************
+*** log management
+******************************************************************************
+
+*** (show log)
+  rl[show.log]:
+  ['show 'log InQ, st(ctl,wait4s,reqQ,es,log), OutQ ]
+   =>
+  [nil,  st(ctl,wait4s,reqQ,es,log), OutQ
+      'user '\n getMaudeName(es) '\n  showLog(log) maudePrompt ] .
+
+*** (reset log)
+  rl[reset.log]:
+  ['reset 'log InQ,  st(ctl,wait4s,reqQ,es,log), OutQ ]
+   =>
+  [nil, st(ctl,wait4s,reqQ,es,nil), OutQ
+      'user '\n getMaudeName(es) '\n  'reset-log-ok maudePrompt ] .
+
+
+******************************************************************************
+***  Entry set management
+******************************************************************************
+
+*** (show eset)
+ rl[show.eset]:
+  ['show 'eset InQ, st(ctl,wait4s,reqQ,es,log), OutQ ]
+   =>
+  [nil, st(ctl,wait4s,reqQ,es,log), OutQ 
+      'user '\n getMaudeName(es) '\n showESet(es) maudePrompt ]  .
+
+ rl[reset.eset]:
+  ['reset 'eset InQ, st(ctl,wait4s,reqQ,es,log), OutQ ]
+   =>
+  [nil, st(ctl,wait4s,reqQ,mt,log), OutQ 
+      'user '\n getMaudeName(es) '\n 'reset-eset-ok maudePrompt ]  .
+
+*** (show summary)
+  rl[show.summary]:
+  ['show 'summary InQ, st(ctl,wait4s,reqQ,es,log), OutQ ]
+   =>
+  [nil, st(ctl,wait4s,reqQ,es,log), OutQ 
+      'user '\n getMaudeName(es) '\n esetSummary(es) maudePrompt ]  .
+
+*** (show entry qval foo)
+ crl[show.entry]:
+  ['show 'entry etype ids, st(ctl,wait4s,reqQ,es,log), OutQ ]
+   =>
+  [nil, st(ctl,wait4s,reqQ,es,log), OutQ 
+   (if (ee? :: Entry)
+     then 'user '\n getMaudeName(es) '\n showEntry(ee?)
+     else 'user '\n getMaudeName(es) '\n etype ids 'noEntry fi) maudePrompt ]
+  if ee? := getEntry(es,etype,ids)  .
+
+*** (remove entry qval foo)
+  rl[remove.entry]:
+  ['remove 'entry etype ids, st(ctl,wait4s,reqQ,es,log), OutQ ]
+   =>
+  [nil, st(ctl,wait4s,reqQ,removeEntry(es,etype, ids),log), OutQ 
+      'user '\n getMaudeName(es) '\n 'entry 'removed etype ids maudePrompt ]  .
+
+*** (copy entry qval ( bar ) foo)
+  rl[copy.entry]:
+  ['copy 'entry etype '`( newids '`) ids, st(ctl,wait4s,reqQ,es,log), OutQ ]
+   =>
+  [nil, st(ctl,wait4s,reqQ,copyEntry(es,etype, ids,newids),log), OutQ 
+      'user '\n getMaudeName(es) '\n
+        'entry 'copied etype '`( newids '`) ids maudePrompt ]  .
+
+*** (show val qval foo)
+ rl[show.val]:
+  ['show 'val etype ids, st(ctl,wait4s,reqQ,es,log), OutQ ]
+   =>
+  [nil, st(ctl,wait4s,reqQ,es,log), OutQ 
+     'user '\n getMaudeName(es) '\n showVal(getVal(es,etype,ids,dummy)) 
+      maudePrompt ] .
+
+
+
+*** (show notes tval mykb)
+ rl[show.notes]:
+  ['show 'notes etype ids, st(ctl,wait4s,reqQ,es,log), OutQ ]
+   =>
+  [nil, st(ctl,wait4s,reqQ,es,log), OutQ 
+    'user '\n getMaudeName(es) '\n showNotes(getNotes(es,etype,ids) )  
+     maudePrompt]  .
+
+*** (show note gname tval mykb)
+ rl[show.note]:
+  ['show 'note tag etype ids, st(ctl,wait4s,reqQ,es,log), OutQ ]
+   =>
+  [nil, st(ctl,wait4s,reqQ,es,log), OutQ 
+    'user '\n getMaudeName(es) '\n showVal(getNote(es,tag,etype,ids) )  
+     maudePrompt]  .
+
+
+******************************************************************************
+*** state management
+******************************************************************************
+
+*** (reset all )
+  rl[reset.all]:
+  ['reset 'all InQ, st(ctl,wait4s,reqQ,es,log), OutQ ]
+   =>
+  [nil, st(ready,mt,nil,mt,nil), OutQ
+      'user '\n getMaudeName(es) '\n  'reset-all-ok maudePrompt ] .
+
+
+*** (show cstate)
+  rl[show.cstate]:
+  ['show 'cstate InQ,  st(ctl,wait4s,reqQ,es,log), OutQ ]
+   =>
+  [nil, st(ctl,wait4s,reqQ,es,log), OutQ
+      'user '\n getMaudeName(es) '\n  showCState(ctl,wait4s,reqQ) maudePrompt ] .
+
+endm
+
+
+**** loadmaude loaded scheduler.maude
+***********************   scheduler.maude  ***********************************
+*** 
+******************************************************************************
+mod SCHEDULER is
+  inc IMAUDE-STATE  .
+****  inc MY-META-TERM .
+
+
+vars InQ OutQ toks toks' : QidList .
+vars token aname vname : Qid .
+var es : ESet .
+var wait4s : Wait4Set .
+var ?req : Request .
+vars reqQ reqQ' : RequestQ .
+var log : Log .
+
+
+******************************************************************************
+**** input is classified, according to the first token, as
+**** a request, an actor message, or  a user command
+****   a request token is one such that isReq(token) evaluates to true;
+****   an actor message token, aname, is one for which there is an element 
+****   wait4(aname,...) in the wait4 set
+****   anything else is a user command
+**** Requests and actor messages are handled by the scheduler by queuing them
+**** Commands have explict rules to handle them (or they are dropped)
+**** When there is no input, the scheduled picks the first enabled request
+**** from the queue for processing
+******************************************************************************
+  op isReq : Qid -> Bool .
+
+  crl[read.input]:
+  [token InQ,  st(ready,wait4s,reqQ,es,log), OutQ ]
+  =>
+  [nil, st(ready, wait4s,(reqQ req(token,ql(InQ),nil)), es,log), OutQ ]
+  if isReq(token) .
+
+  sort RequestSched .
+  op _@_ : RequestQ RequestQ -> RequestSched .
+  op enabled : Wait4Set Request -> Bool .
+  eq enabled(wait4s,?req) = false [owise] .
+
+****                        toCheck  Checked
+  op findEnabled : Wait4Set RequestQ RequestQ -> RequestSched .
+
+  eq findEnabled(wait4s, nil, reqQ') = (nil @ reqQ') .
+  eq findEnabled(wait4s, (?req reqQ), reqQ') = 
+       ( if enabled(wait4s,?req) 
+         then (?req @ (reqQ' reqQ)) 
+         else findEnabled(wait4s, reqQ, (reqQ' ?req))
+         fi ) .
+
+crl[schedule.request]:
+  [nil, st(ready, wait4s, reqQ, es,log), OutQ]
+  =>
+  [nil, st(processing(?req), wait4s, reqQ', es,log), OutQ]
+  if (?req @ reqQ') := findEnabled(wait4s,reqQ,nil) .
+
+
+rl[schedule.wait4]:
+  [aname InQ,
+   st(ready, (wait4(aname,toks,reqQ') ! wait4s), reqQ, es,log),
+   OutQ]
+   =>
+   [nil,
+    st(ready, wait4s, (reqQ supplyPars(reqQ',aname InQ)), es,log),
+    OutQ ] .
+
+
+****************************************************************
+**** example request -- adding a log item to the log component
+****************************************************************
+  eq isReq('logreq) = true .
+  eq enabled(wait4s,req('logreq,ql( toks),reqQ')) = true .
+
+  rl[logreq]:
+   [nil,
+    st(processing(req('logreq,ql(toks),reqQ')), wait4s,reqQ,es,log), 
+    OutQ]
+     =>
+   [nil,  
+    st(ready, wait4s, (reqQ reqQ'), es, (log log('report, toks, dummy))),
+       OutQ ] .
+
+
+****************************************************************************
+**** internal request to really print to user
+  eq  isReq('foruser) = true .
+  eq enabled(wait4s,req('foruser,ql(toks),reqQ')) = true .
+
+ rl[foruser]:
+   [nil,
+    st(processing(req('foruser,ql(toks),reqQ')), wait4s,reqQ,es,log), 
+    OutQ]
+     =>
+   [nil,  
+    st(ready, wait4s,  (reqQ reqQ'),  es,log),
+    OutQ  'user '\n 'maude '\n toks   maudePrompt ] .
+
+
+******************************************************************************
+**** saving toks from aname in vname
+**** maybe belongs in REWRITE????
+******************************************************************************
+**** not a toplevel req
+  eq enabled(wait4s,creq('setqval,aname toks', ql(vname  toks),reqQ')) = true .
+
+  rl[setqval]:
+  [nil, st(processing(creq('setqval,aname toks',ql(vname toks),reqQ')),
+           wait4s,reqQ, es,log),  OutQ]
+   =>
+  [nil,
+   st(ready,wait4s,(reqQ reqQ'), addEntry(es, 'qval, vname, ql(toks')),log),
+      OutQ ] .
+
+endm
+
+ 
+**** loadmaude loaded rewrite.maude
+******************* rewrite.maude  ***************************************
+******************************************************************************
+*** basics needed for writing interactive shells for maude models
+******************************************************************************
+mod REWRITE is
+  inc MY-META-ALL .
+  inc SCHEDULER .         *** inc CONTROL, ENTRY, QID-UTILITIES, META-LEVEL 
+                             *** inc QID-LIST, CONVERSION
+******************************************************************************
+**** Requests are
+***(
+  setqc id toks            *** stores toks as QVal under setq id
+  letc id modname sort t   *** attempts to parse term (toks) lin modname
+                           *** as element of sort.  If sucessful
+                           *** reduces to canonical form and stores
+                           ***  tm(modname,res) under 'let id 
+  rewritec nq vname [flag] *** assumes entry let vname tm(modname,t) exists
+                           *** rewrites tm in modname for nq and updates
+  applyc modname vname fname arg1 ... argn
+      ---- in the module <modname> applies the function <fname> 
+      ---- to argements stored (using let) in <arg1> ... <argn>
+      ---- and reduces (using equations) to canonical form
+      --- stores the result in <vname> 
+  applyrulesc vname rname rids  
+
+In all cases the continuation is queued once the environment is updated
+)
+******************************************************************************
+
+var ctl : Control .
+var wait4s : Wait4Set .
+var reqQ reqQ' : RequestQ .
+var ee? : Entry? .
+vars log log'  : Log .
+vars es es' : ESet .
+vars tval eval : Val .
+
+vars InQ OutQ toks toks' rids xrids qidl : QidList .
+vars  modname rname fname vname aname sort nq fnq rid q : Qid .
+vars tok start len vtype op : Qid .
+vars t t' : Term .
+var type : Type .
+var tml : TermList .
+vars res? res1? : ResultPair? .
+var res?? : [ResultPair?] .
+var res : ResultPair .
+var mod : Module .
+var res4? : Result4Tuple? .
+var bnd : Bound .
+vars n n0 n1 : Nat .
+var nz : NzNat .
+vars b wf : Bool .
+var wf? : [Bool] .
+var qset : QidSet .
+var str  : String .
+
+op noResult : -> ResultPair? .
+
+******************************************************************************
+**** generic assignment commands, log if no es update
+******************************************************************************
+
+*** (setqc foo bar ... )
+  eq isReq('setqc) = true .
+  eq enabled(wait4s,req('setqc,ql(vname  toks),reqQ')) = true .
+
+  rl[setqc]:
+  [nil, st(processing(req('setqc,ql(vname toks),reqQ')),
+           wait4s,reqQ, es,log),  OutQ]
+   =>
+  [nil,
+   st(ready,wait4s,(reqQ reqQ'), addEntry(es, 'qval, vname, ql(toks)),log),
+      OutQ ] .
+
+******************************************************************************
+
+*** (setsc foo bar ...)
+  eq isReq('setsc) = true .
+  eq enabled(wait4s,req('setsc,ql(vname  toks),reqQ')) = true .
+
+  rl[setsc]:
+  [nil, st(processing(req('setsc,ql(vname toks),reqQ')),
+           wait4s,reqQ, es,log),  OutQ]
+   =>
+  [nil,
+   st(ready,wait4s,(reqQ reqQ'),
+      addEntry(es, 'sval, vname, sv(qidl2str(toks))),log),
+      OutQ ] .
+
+
+******************************************************************************
+**** operating on qids and strings
+**** (exec vtype ans op args)
+******************************************************************************
+  eq isReq('exec) = true .
+  eq enabled(wait4s,req('exec,ql(vtype vname op toks),reqQ')) = true .
+
+  rl[exec]:
+  [nil, st(processing(req('exec,ql(vtype vname op toks),reqQ')),
+           wait4s,reqQ, es,log),  OutQ]
+   =>
+  [nil,
+   st(ready,wait4s,(reqQ reqQ'), exec(es,vtype, vname,op,toks),log),
+   OutQ ] .
+
+
+  op exec : ESet Qid Qid Qid QidList -> ESet .
+  op qconc : ESet QidList -> QidList .
+  op sconc : ESet QidList -> String .
+
+  eq qconc(es,nil) = nil .
+  eq qconc(es, tok toks) =
+    qvalQidList(getVal(es,'qval,tok,ql(nil))) qconc(es, toks) . 
+
+  eq sconc(es,nil) = "" .
+  eq sconc(es, tok toks) = 
+       svalString(getVal(es,'sval,tok,sv(""))) + sconc(es, toks) . 
+
+  eq exec(es,'q,vname,'+,toks) = addEntry(es,'qval,vname,ql(qconc(es,toks))) .
+  eq exec(es,'s,vname,'+,toks) = addEntry(es,'sval,vname,sv(sconc(es,toks))) .
+
+  eq exec(es,'q,vname,'len,toks) = 
+      addEntry(es,'qval,vname, 
+               ql(qid(string(size(
+                    qvalQidList(getVal(es,  
+                                       'qval,getPre(1,toks),ql(nil)))),10)))) .
+  eq exec(es,'s,vname,'len,toks) = 
+      addEntry(es,'qval,vname, 
+               ql(qid(string(length(
+                     svalString(getVal(es,  
+                                       'sval,getPre(1,toks),sv("")))),10)))) .
+
+  ceq exec(es,'q,vname,'sub, start len toks) = 
+        addEntry(es,'qval,vname, ql(getPre(n1,getPost(n0,qidl))))
+  if qidl :=   qvalQidList(getVal(es, 'qval,getPre(1,toks),ql(nil)))
+  /\ n0 := (if rat(string(start),10) :: Nat 
+            then rat(string(start),10) 
+            else 0 fi)
+  /\ n1 := (if rat(string(len),10) :: Nat 
+            then rat(string(len),10) 
+            else 0 fi) .
+  
+
+  ceq exec(es,'s,vname,'sub, start len toks) = 
+        addEntry(es,'sval,vname, sv(substr(str,n0,n1)))
+  if str :=   svalString(getVal(es, 'sval,getPre(1,toks),sv("")))
+  /\ n0 := (if rat(string(start),10) :: Nat 
+            then rat(string(start),10) 
+            else 0 fi)
+  /\ n1 := (if rat(string(len),10) :: Nat 
+            then rat(string(len),10) 
+            else 0 fi) .
+
+  eq exec(es,'q,vname,'q2s,toks) =
+       addEntry(es,'sval,vname, 
+           sv(qidl2str(qvalQidList(getVal(es,'qval,getPre(1,toks),ql(nil)))))) .
+
+  eq exec(es,'s,vname,'s2q,toks) =
+      addEntry(es,'qval,vname, 
+           ql(str2qidl(svalString(getVal(es,'sval,getPre(1,toks),sv("")))))) .
+
+******************************************************************************
+***(
+**** saving toks from aname in vname
+  eq enabled(wait4s,creq('setqval, aname toks', ql(vname  toks),reqQ')) = true .
+
+  rl[setqvalc]:
+  [nil, st(processing(creq('setqval,aname toks',ql(vname toks),reqQ')),
+           wait4s,reqQ, es,log),  OutQ]
+   =>
+  [nil,
+   st(ready,wait4s,(reqQ reqQ'), addEntry(es, 'qval, vname, ql(toks')),log),
+      OutQ ] .
+)
+******************************************************************************
+  eq isReq('letc) = true .
+  eq enabled(wait4s,req('letc,ql(vname modname sort toks),reqQ')) = true .
+
+**** (letc sum NAT Nat 2 + 3)
+ crl[letc]:
+  [nil,
+  st(processing(req('letc,ql(vname modname sort toks), reqQ')),
+      wait4s,reqQ,es,log),  OutQ]
+   =>
+  [nil,
+   st(ready,wait4s,(reqQ reqQ'),es',log'),
+   OutQ ]
+   if res?? := metaParse([modname],toks,sort)
+     /\
+      es' := (if (res?? :: ResultPair)
+              then addEntry(es, 'tval, vname, 
+                          tm(modname,
+                             getTerm(metaReduce([modname], getTerm(res??)))))
+              else es fi )  
+     /\
+      log' := (if (res?? :: ResultPair)
+               then log
+               else (log log('noParse, 'letc vname modname sort toks, dummy) ) 
+               fi)  .
+
+******************************************************************************
+  eq isReq('rewritec) = true .
+  eq enabled(wait4s,req('rewritec,ql(nq vname toks),reqQ)) = true .
+
+**** if toks is not nil the first element is taken as the id of the result
+  crl[rewritec]:
+   [nil,
+    st(processing(req('rewritec, ql(nq vname toks),reqQ')), 
+                  wait4s,reqQ,es,log),
+    OutQ]
+     =>
+   [nil,  st(ready, wait4s, (reqQ reqQ'), es', log'), OutQ ]
+   if ee? := getEntry(es,'tval,vname)
+   /\ tval := ( if (ee? :: Entry) then entryVal(ee?) else dummy fi )
+   /\ modname := ( if (tval :: TVal) then tvalModname(tval) else 'BOOL fi )
+   /\ t := ( if (tval :: TVal) then tvalTerm(tval) else 'true.Bool fi )
+   /\ b := rat(string(nq),10) :: Nat 
+   /\ bnd := (if (nq == '0) 
+              then unbounded
+              else (if rat(string(nq),10) :: NzNat 
+                    then rat(string(nq),10) 
+                    else 1 
+                    fi) 
+              fi)
+   /\ res?? := (if b then metaRewrite([modname], t, bnd) else noResult fi)
+   /\ rname := getNth(0,toks,vname)
+   /\ es' := ( if (ee? :: Entry and res?? :: ResultPair)
+               then addEntry(es,'tval,rname,tm(modname,getTerm(res??)))
+               else es
+               fi )
+   /\ log' := (log (if (ee? :: Entry and res?? :: ResultPair) 
+                    then nil 
+                    else log('noEntry,'rewritec nq vname toks, dummy) fi) ) .
+
+******************************************************************************
+  eq isReq('frewritec) = true .
+  eq enabled(wait4s,req('frewritec,ql(nq fnq vname toks),reqQ)) = true .
+
+**** if toks is not nil the first element is taken as the id of the result
+**** nq coerced to non zero bound, fnq coerced to non zero nat (default 1)
+  crl[fewritec]:
+   [nil,
+    st(processing(req('frewritec, ql(nq fnq vname toks),reqQ')),
+       wait4s,reqQ,es,log),
+    OutQ]
+     =>
+   [nil,  st(ready, wait4s, (reqQ reqQ'), es', log'), OutQ ]
+   if ee? := getEntry(es,'tval,vname)
+   /\ tval := ( if (ee? :: Entry) then entryVal(ee?) else dummy fi )
+   /\ modname := ( if (tval :: TVal) then tvalModname(tval) else 'BOOL fi )
+   /\ t := ( if (tval :: TVal) then tvalTerm(tval) else 'true.Bool fi )
+   /\ b := rat(string(nq),10) :: Nat and rat(string(fnq),10) :: NzNat 
+   /\ bnd := (if (nq == '0) 
+              then unbounded 
+              else (if rat(string(nq),10) :: NzNat 
+                    then rat(string(nq),10) 
+                    else 1 
+                    fi)
+              fi)
+   /\ nz := (if rat(string(fnq),10) :: NzNat then rat(string(fnq),10) else 1 fi)
+
+   /\ res?? := (if b then metaFrewrite([modname], t,bnd,nz) else noResult fi)
+   /\ rname := getNth(0,toks,vname)
+   /\ es' := ( if ee? :: Entry and res?? :: ResultPair
+               then addEntry(es,'tval,rname,  
+                       tm(modname, getTerm(metaReduce([modname], 
+                          getTerm(res??)))))
+               else es  fi )
+   /\ log' := (log (if (ee? :: Entry and res?? :: ResultPair) 
+                    then nil 
+                    else log('noEntry,'frewritec nq fnq vname toks, dummy) fi) ) .
+
+******************************************************************************
+  eq isReq('applyc) = true .
+  eq enabled(wait4s,req('applyc,ql(modname vname fname toks),reqQ)) = true .
+
+  sort TermListQ .
+  op {_,_} : Bool TermList -> TermListQ .
+
+  op lookUpArgs : ESet QidList TermList -> TermListQ .
+  eq lookUpArgs(es,nil,tml) = {true, tml} .
+  ceq lookUpArgs(es,vname toks,tml) = 
+      ( if (eval :: TVal) 
+        then lookUpArgs(es,toks,(tml, tvalTerm(eval))) 
+        else {false, tml}
+        fi )
+   if   ee? := getEntry(es,'tval,vname) 
+   /\  eval := (if ee? :: Entry then entryVal(ee?) else ql(nil) fi) .
+      
+
+*** (applyc modname vname fname arg1 ... argn) 
+  crl[applyc]:
+   [nil,
+    st(processing(req('applyc, ql(modname vname fname toks),reqQ')), 
+       wait4s,reqQ,es,log), 
+    OutQ]
+     =>
+   [nil,  st(ready, wait4s, (reqQ reqQ'), es',log'), OutQ ]
+   if {b,tml} := lookUpArgs(es,toks,empty)
+   /\ wf? := (if b then wellFormed([modname],fname[tml]) else false fi) 
+   /\ wf := (if wf? :: Bool then wf? else false fi)
+   /\ res?? := ( if wf
+                then metaReduce([modname], fname[tml])
+                else noResult fi )
+   /\ es' := ( if res?? :: ResultPair
+                 then addEntry(es,'tval,vname,tm(modname,getTerm(res??)))
+                 else es fi )
+   /\ log' := log ( if res?? :: ResultPair 
+                    then nil 
+                    else log('error, 'applyc modname vname fname toks, dummy)
+                    fi ) .
+
+******************************************************************************
+
+  eq isReq('applyrulesc) = true .
+  eq enabled(wait4s,req('applyrulesc,ql(vname rname q toks),reqQ)) = true .
+
+*** apply a list of rules to a term stored in vname, store result in rname
+*** (applyrulesc vname rname q toks)
+  crl[applyrulesc]:
+   [nil,
+    st(processing(req('applyrulesc,ql(vname rname q toks),reqQ')),
+       wait4s,reqQ,es,log), 
+    OutQ]
+     =>
+   [nil,  st(ready, wait4s, (reqQ reqQ'), es',log), 
+    OutQ  ]
+   if ee? := getEntry(es,'tval,vname)
+   /\ tval := if (ee? :: Entry) then entryVal(ee?) else dummy fi
+   /\ modname := if (tval :: TVal) then tvalModname(tval) else 'BOOL fi
+   /\ t := if (tval :: TVal) then tvalTerm(tval) else 'true.Bool fi
+   /\ wf? := (if tval :: TVal then wellFormed([modname],t) else false fi)
+   /\ wf := (if wf? :: Bool then wf? else false fi)
+   /\ ql(rids) := getVal(es, 'qval, q, ql(nil))
+   /\ res? := (if (wf and rids =/= nil)
+               then applyRules([modname], t, rids) 
+               else noResult fi)
+   /\ es' := ( if (ee? :: Entry and res? :: ResultPair)
+               then addEntry(es,'tval,rname,tm(modname,getTerm(res?)))
+               else es  fi )
+   /\ log' := (if (ee? :: Entry and res? :: ResultPair) 
+               then log 
+               else log log('error, 'applyrulesc vname rname q rids, dummy )
+               fi)               
+     .
+
+**** assume wellFormed(mod,t) == true
+  op applyRules : Module Term QidList -> ResultPair .
+  op applyRules1 : Module Term Qid QidList -> ResultPair .
+  eq applyRules(mod,t,nil) = metaReduce(mod,t) .
+  eq applyRules(mod,t,(rid rids)) = applyRules1(mod,t,rid,rids) .
+
+***** '? as default rid is hack, but should never be used
+  ceq applyRules1(mod,t, rid, rids) = 
+    ( if rids == nil
+      then {t',  
+            (if res4? :: Result4Tuple then getType(res4?) else leastSort(mod,t) fi)}
+      else applyRules1(mod,t',getNth(0,rids,'?), getPost(1,rids))  
+       fi )
+   if res4? := metaXapply(mod,t,rid,none,0,unbounded,0) 
+    /\ t' :=  (if res4? :: Result4Tuple then getTerm(res4?) else t fi)
+  .
+
+******************************************************************************
+**** listrules  -- .. (rid numinst) .. 
+**** numinst is the least nat such that call to metaXapply(..... numinst) fails
+******************************************************************************
+ eq isReq('listrulesc) = true .
+  eq enabled(wait4s,req('listrulesc,ql(vname rname toks),reqQ)) = true .
+
+*** find all rules that apply
+*** (listrulesc vname rname)
+  crl[listrulesc]:
+   [nil,
+    st(processing(req('listrulesc,ql(vname rname toks),reqQ')),
+                  wait4s,reqQ,es,log), 
+    OutQ]
+     =>
+   [nil,  st(ready, wait4s, (reqQ reqQ'), es',log), 
+    OutQ  ]
+   if ee? := getEntry(es,'tval,vname)
+   /\ tval := if (ee? :: Entry) then entryVal(ee?) else dummy fi
+   /\ modname := if (tval :: TVal) then tvalModname(tval) else 'BOOL fi
+   /\ t := if (tval :: TVal) then tvalTerm(tval) else 'true.Bool fi
+   /\ wf? := (if tval :: TVal then wellFormed([modname],t) else false fi)
+   /\ wf := (if wf? :: Bool then wf? else false fi)
+   /\ xrids := (if wf 
+               then listRules([modname], t, getRuleIds(upRls(modname,true)),nil)
+               else nil fi)
+   /\ es' := ( if (ee? :: Entry and wf)
+               then addEntry(es,'qval,rname,ql(xrids))
+               else es  fi )
+   /\ log' := (if (ee? :: Entry and wf)
+               then log 
+               else log log('error, 'listrulesc vname rname, dummy )
+               fi)               
+     .
+
+**** assume wellFounded(mod,t)
+  op listRules : Module Term QidSet QidList -> QidList .
+  eq listRules(mod,t, none, xrids) = xrids .
+  eq listRules(mod,t, (rid ; qset),xrids) =
+        listRules(mod,t,qset, 
+                  xrids (rid qid(string(countApps(mod,t,rid,0),10)))) .
+
+
+  op countApps : Module Term Qid Nat -> Nat .
+  eq countApps(mod,t,rid,n) =
+   ( if metaXapply(mod,t,rid,none,0,unbounded, n) :: Result4Tuple
+     then countApps(mod,t,rid, s n) 
+     else n fi ) .
+
+
+******************************************************************************
+**** applyxrulesc --- ... rid n ...
+******************************************************************************
+
+  eq isReq('applyxrulesc) = true .
+  eq enabled(wait4s,req('applyxrulesc,ql(vname rname q toks),reqQ)) = true .
+
+*** apply a list of rules to a term stored in vname, store result in rname
+*** (applyxrulesc vname rname q toks)
+  crl[applyxrulesc]:
+   [nil,
+    st(processing(req('applyxrulesc,ql(vname rname q toks),reqQ')),
+       wait4s,reqQ,es,log), 
+    OutQ]
+     =>
+   [nil,  st(ready, wait4s, (reqQ reqQ'), es',log), 
+    OutQ  ]
+   if ee? := getEntry(es,'tval,vname)
+   /\ tval := if (ee? :: Entry) then entryVal(ee?) else dummy fi
+   /\ modname := if (tval :: TVal) then tvalModname(tval) else 'BOOL fi
+   /\ t := if (tval :: TVal) then tvalTerm(tval) else 'true.Bool fi
+   /\ wf? := (if tval :: TVal then wellFormed([modname],t) else false fi)
+   /\ wf := (if wf? :: Bool then wf? else false fi)
+   /\ ql(rids) := getVal(es, 'qval, q, ql(nil))
+   /\ res? := (if (wf and rids =/= nil)
+               then applyXRules([modname], t, rids) 
+               else noResult fi)
+   /\ es' := ( if (ee? :: Entry and res? :: ResultPair)
+               then addEntry(es,'tval,rname,tm(modname,getTerm(res?)))
+               else es  fi )
+   /\ log' := (if (ee? :: Entry and res? :: ResultPair) 
+               then log 
+               else log log('error, 'applyxrulesc vname rname q rids, dummy )
+               fi)               
+     .
+
+**** assume wellFormed(mod,t) == true
+  op applyXRules : Module Term QidList -> ResultPair .
+  op applyXRules1 : Module Term Qid Qid QidList -> ResultPair .
+  eq applyXRules(mod,t,rids) = metaReduce (mod,t) [owise] .
+  eq applyXRules(mod,t,(rid nq rids)) = applyXRules1(mod,t,rid,nq,rids) .
+
+***** '? as default rid is hack, but should never be used
+  ceq applyXRules1(mod,t, rid,nq, rids) = 
+    ( if rids == nil or getPost(1,rids) == nil
+      then {t',  
+            (if res4? :: Result4Tuple then getType(res4?) else leastSort(mod,t) fi)}
+      else applyXRules1(mod,t',getNth(0,rids,'?), getNth(1,rids,'?),
+                        getPost(2,rids))  
+       fi )
+   if res4? := (if  rat(string(nq),10) :: Nat
+                then metaXapply(mod,t,rid,none,0,unbounded, rat(string(nq),10))
+                else (failure).Result4Tuple? fi)
+    /\ t' :=  (if res4? :: Result4Tuple then getTerm(res4?) else t fi)
+  .
+
+
+endm
+
+**** loadmaude loaded filemanager.maude
+******************************* filemanager.maude ***************************
+mod FILEMANAGER is
+  inc SCHEDULER .
+****  inc IUTIL .
+
+  vars InQ OutQ  toks toks' : QidList .
+  vars mode ack vname fname mname aname g2dname stype etype : Qid .
+  vars es es'  : ESet .
+  var ee? : Entry? .
+  var wait4s wait4s' : Wait4Set .
+  var ?req : Request .
+  vars reqQ reqQ' reqQ0 : RequestQ .
+  var log log' : Log .
+  var ctl : Control .
+ 
+******************************************************************************
+****  filewrite mode fname  toks
+******************************************************************************
+
+ eq isReq('filewrite) = true .
+  eq enabled(wait4s,req('filewrite,ql(fname mode toks),reqQ0)) =
+      not(waiting4(wait4s,'graphics2d)) .
+
+**** (filewrite  fname mode toks)
+****  mode =  A for append anything else will overwrite
+ rl[filewrite]:
+   [nil,
+    st(processing(req('filewrite,ql(fname mode toks),reqQ0)),
+       wait4s,reqQ,es,log), 
+    OutQ]
+     =>
+   [nil,  
+    st(ready, 
+       wait4s ! wait4('graphics2d,'write fname mode,
+                       req('logreq, ql('filewrite fname mode), reqQ0)),
+       reqQ,es,log),
+    OutQ 'graphics2d '\n  'maude 
+         '\n (if mode == 'A then 'append else 'write fi)
+         '\n  fname '\n toks 
+    maudePrompt ] .   
+ 
+******************************************************************************
+**** fileread  fname  vname
+**** puts result minus filemanager token in vname
+**** filemanager contents <file>  <text>
+**** or 
+**** filemanager readFailure <file>
+******************************************************************************
+
+  eq isReq('fileread) = true .
+  eq enabled(wait4s,req('fileread,ql(fname vname toks),reqQ0)) =
+      not(waiting4(wait4s,'graphics2d)) .
+
+**** (fileread fname vname)
+ rl[fileread]:
+   [nil,
+    st(processing(req('fileread,ql(fname vname toks),reqQ0)), 
+       wait4s,reqQ,es,log), 
+    OutQ]
+     =>
+   [nil,  
+    st(ready, 
+       wait4s ! 
+        wait4('graphics2d,'read fname, creq('setqval,nil,ql(vname ), reqQ0)),
+       reqQ,es,log),
+    OutQ 'graphics2d '\n  'maude '\n 'read '\n fname ]  .   
+
+
+******************************************************************************
+****!!!! saving/restoring should log success/failure indication
+******************************************************************************
+****  saving state
+******************************************************************************
+  eq isReq('save) = true .
+  eq enabled(wait4s,req('save,ql(fname mode stype toks),reqQ0)) = true .
+
+**** (save fname mode log)
+**** (save fname mode requests)
+**** (save fname mode wait4s)
+**** (save fname mode eset)
+**** (save fname mode entry etype ids)
+ crl[save]:
+   [nil,
+    st(processing(req('save,ql(fname mode stype toks),reqQ0)), 
+        wait4s,reqQ,es,log), 
+    OutQ]
+     =>
+   [nil,  
+    st(ready, wait4s,
+       (reqQ req('filewrite,
+                  ql(fname mode toks'),
+                  req('logreq,ql('save  fname  mode stype toks), reqQ0))),
+       es,log),
+    OutQ ] 
+  if toks' :=  showState(st(ready,wait4s,reqQ,es,log),stype toks) .
+
+
+******************************************************************************
+**** restoring entry / eset
+******************************************************************************
+  eq isReq('restore) = true .
+  eq enabled(wait4s,req('restore,ql(fname vname stype toks),reqQ0)) = true .
+
+****                  tmp var for unparsed data
+**** (restore fname vname stype)
+ rl[restore]:
+   [nil,
+    st(processing(req('restore,ql(fname vname stype toks),reqQ0)), 
+        wait4s,reqQ,es,log), 
+    OutQ]
+     =>
+    [nil,  
+    st(ready, wait4s,
+       (reqQ req('fileread,
+                  ql(fname vname),
+                  req('parseRestored,ql(vname stype toks), 
+                      req('logreq,ql('restore fname vname stype toks),
+                          reqQ0)))),
+       es,log),
+    OutQ ] .
+
+
+******************************************************************************
+  eq isReq('parseRestored) = true .
+  eq enabled(wait4s,req('parseRestored,ql(vname stype toks),reqQ0)) = true .
+
+**** assume toks' stored by fileread
+****  begins with contents <file> toks''
+**** or 
+**** readFailure <file> 
+**** for now only restore eset
+
+**** (parseRestored vname)
+ crl[parseRestored]:
+   [nil,
+    st(processing(req('parseRestored,ql(vname stype toks),reqQ0)), 
+       wait4s,reqQ,es,log), 
+    OutQ]
+     =>
+   [nil, restoreState(wait4s, reqQ,reqQ0,es,log,stype,toks'), OutQ]
+  if ql(toks') := getVal(es,'qval,vname,ql(nil))
+ .
+
+
+ op restoreState : Wait4Set RequestQ RequestQ ESet Log Qid QidList -> State .
+ eq restoreState(wait4s, reqQ,reqQ0,es,log,stype,'contents fname toks') =
+      restoreStateX(wait4s, reqQ,reqQ0,es,log,stype, toks').
+
+ eq restoreState(wait4s, reqQ,reqQ0,es,log,stype, ack fname toks') =
+      st(ready,wait4s, (reqQ reqQ0), es, 
+         log log('restoreFailed, ack fname stype,dummy)) [owise] .
+
+
+ op restoreStateX : Wait4Set RequestQ RequestQ ESet Log Qid QidList -> State .
+ eq restoreStateX(wait4s, reqQ,reqQ0,es,log,'log, toks) =  
+           st(ready,wait4s, (reqQ reqQ0), es, parseLog(toks)) .
+ eq restoreStateX(wait4s, reqQ,reqQ0,es,log,'requests, toks) =  
+           st(ready,wait4s, (parseRequestQ(toks) reqQ0), es, log)  .
+ eq restoreStateX(wait4s, reqQ,reqQ0,es,log,'wait4s, toks) =  
+           st(ready, parseWait4s(toks), (reqQ reqQ0), es, log)  .
+
+ eq restoreStateX(wait4s, reqQ,reqQ0,es,log,'eset, toks) =  
+           st(ready, wait4s, (reqQ reqQ0), parseESet(es,toks), log)  .
+
+ eq restoreStateX(wait4s, reqQ,reqQ0,es,log,'entry, toks) =  
+           st(ready, wait4s, (reqQ reqQ0), parseEntries(es,toks), log)  .
+
+
+******************************************************************************
+**** Xtended Filemanager -- called with g2d name -- client or server 
+**** filewriteX filereadX saveX restoreX
+ 
+******************************************************************************
+****  filewritex g2dname mode fname  toks
+******************************************************************************
+
+ eq isReq('filewriteX) = true .
+  eq enabled(wait4s,req('filewriteX,ql(g2dname fname mode toks),reqQ0)) =
+      not(waiting4(wait4s,g2dname)) .
+
+**** (filewriteX g2dname  fname mode toks)
+****  mode =  A for append anything else will overwrite
+ rl[filewriteX]:
+   [nil,
+    st(processing(req('filewriteX,ql(g2dname fname mode toks),reqQ0)),
+       wait4s,reqQ,es,log), 
+    OutQ]
+     =>
+   [nil,  
+    st(ready, 
+       wait4s ! wait4(g2dname,'write fname mode,
+                       req('logreq, ql('filewriteX g2dname fname mode), reqQ0)),
+       reqQ,es,log),
+    OutQ g2dname '\n  'maude 
+         '\n (if mode == 'A then 'append else 'write fi)
+         '\n  fname '\n toks 
+    maudePrompt ] .   
+ 
+******************************************************************************
+**** filereadX  fname  vname
+**** puts result minus filemanager token in vname
+**** filemanager contents <file>  <text>
+**** or 
+**** filemanager readFailure <file>
+******************************************************************************
+
+  eq isReq('filereadX) = true .
+  eq enabled(wait4s,req('filereadX,ql(g2dname fname vname toks),reqQ0)) =
+      not(waiting4(wait4s,g2dname)) .
+
+**** (filereadX g2dname fname vname)
+ rl[filereadX]:
+   [nil,
+    st(processing(req('filereadX,ql(g2dname fname vname toks),reqQ0)), 
+       wait4s,reqQ,es,log), 
+    OutQ]
+     =>
+   [nil,  
+    st(ready, 
+       wait4s ! 
+        wait4(g2dname,'read fname, creq('setqval,nil,ql(vname ), reqQ0)),
+       reqQ,es,log),
+    OutQ g2dname '\n  'maude '\n 'read '\n fname ]  .   
+
+
+******************************************************************************
+****!!!! saving/restoring should log success/failure indication
+******************************************************************************
+****  saving state
+******************************************************************************
+  eq isReq('saveX) = true .
+  eq enabled(wait4s,req('saveX,ql(g2dname fname mode stype toks),reqQ0)) = true .
+
+**** (save fname mode log)
+**** (save fname mode requests)
+**** (save fname mode wait4s)
+**** (save fname mode eset)
+**** (save fname mode entry etype ids)
+ crl[saveX]:
+   [nil,
+    st(processing(req('saveX,ql(g2dname fname mode stype toks),reqQ0)), 
+        wait4s,reqQ,es,log), 
+    OutQ]
+     =>
+   [nil,  
+    st(ready, wait4s,
+       (reqQ req('filewriteX,
+                  ql(g2dname fname mode toks'),
+                  req('logreq,ql('saveX g2dname fname  mode stype toks), reqQ0))),
+       es,log),
+    OutQ ] 
+  if toks' :=  showState(st(ready,wait4s,reqQ,es,log),stype toks) .
+
+
+******************************************************************************
+**** restoring entry / eset
+******************************************************************************
+  eq isReq('restoreX) = true .
+  eq enabled(wait4s,req('restoreX,ql(g2dname fname vname stype toks),reqQ0)) = true .
+
+****                  tmp var for unparsed data
+**** (restoreX g2dname fname vname stype)
+ rl[restoreX]:
+   [nil,
+    st(processing(req('restoreX,ql(g2dname fname vname stype toks),reqQ0)), 
+        wait4s,reqQ,es,log), 
+    OutQ]
+     =>
+    [nil,  
+    st(ready, wait4s,
+       (reqQ req('filereadX,
+                  ql(g2dname fname vname),
+                  req('parseRestored,ql(vname stype toks), 
+                      req('logreq,ql('restoreX g2dname fname vname stype toks),
+                          reqQ0)))),
+       es,log),
+    OutQ ] .
+
+******************************************************************************
+
+
+endm
+
+**** loadmaude loaded g2d.maude
+mod G2D is
+  inc MY-META-ALL .
+  inc SCHEDULER .         *** inc CONTROL, ENTRY, QID-UTILITIES, META-LEVEL 
+                             *** inc QID-LIST, CONVERSION
+ inc TEMPLATES .
+
+**** need to add g2dname lookup
+******************************************************************************
+******************************************************************************
+
+var ctl : Control .
+var wait4s : Wait4Set .
+var reqQ reqQ' : RequestQ .
+var ee? : Entry? .
+vars log log'  : Log .
+vars es es' : ESet .
+
+vars InQ OutQ toks toks' : QidList .
+vars  modname fname vname mname g2dname gname aname : Qid .
+var ?string : String .
+
+
+**** imagine two g2ds -- one for viewer (possibly remote) one for services
+**** next round need requests to supply g2d parameter
+
+**** for local service
+  op getG2dName : ESet -> Qid .
+  eq getG2dName(es) = 
+        qvalQidList(getVal(es, 'qval, 'g2dName, ql('graphics2d)) ) .
+
+**** viewer possibly remote
+  op getG2dVName : ESet -> Qid .
+  eq getG2dVName(es) = 
+        qvalQidList(getVal(es, 'qval, 'g2dVName, ql('graphics2d)) ) .
+
+  op withAckTemplate : -> String .
+  eq withAckTemplate = 
+"(seq \n\
+    %exp\n\
+    (sinvoke \"g2d.util.ActorMsg\" \"send\" %replyto %g2dname \"OK\") )" .
+
+**** (apply sendMessage %replyto  %g2dname \"OK\") 
+ 
+ op withAck : String Qid Qid -> String .
+ eq withAck(?string,mname,aname) =
+     fillTemplate(withAckTemplate,
+                  (("%exp" :~ ?string),
+                   ("%replyto" :~ squote(string(mname))),
+                   ("%g2dname" :~ squote(string(aname))))) .
+
+  op withQResultTemplate : -> String .
+  eq withQResultTemplate = 
+"(let ((result %exp))\n\
+    (sinvoke \"g2d.util.ActorMsg\" \"send\" %replyto %g2dname\n\
+             (invoke result \"toString\")) )" .
+
+**** (apply sendMessage %replyto  %g2dname (invoke result \"toString\"))
+ 
+ op withQResult : String Qid Qid -> String .
+ eq withQResult(?string,mname,aname) =
+     fillTemplate(withQResultTemplate,
+                  (("%exp" :~ ?string),
+                   ("%replyto" :~ squote(string(mname))),
+                   ("%g2dname" :~ squote(string(aname))))) .
+
+  op withSResultTemplate : -> String .
+  eq withSResultTemplate = 
+"(let ((result %exp))\n\
+    (sinvoke \"g2d.util.ActorMsg\" \"send\" %replyto %g2dname\n\
+          (concat \"\\\"\" (invoke result \"toString\") \"\\\"\") ))"  .
+ 
+ op withSResult : String Qid Qid -> String .
+ eq withSResult(?string,mname,aname) =
+     fillTemplate(withSResultTemplate,
+                  (("%exp" :~ ?string),
+                   ("%replyto" :~ squote(string(mname))),
+                   ("%g2dname" :~ squote(string(aname))))) .
+
+******************************************************************************
+**** loading a file into the graphics2d actor
+******************************************************************************
+  eq isReq('loadg2dlib) = true .
+  eq enabled(wait4s,req('loadg2dlib,ql(g2dname fname toks),reqQ)) = 
+      not(waiting4(wait4s,g2dname)) .
+
+  crl[loadg2dlib]:
+   [nil,
+    st(processing(req('loadg2dlib,ql(g2dname fname toks),reqQ')), 
+       wait4s,reqQ,es,log), 
+    OutQ]
+     =>
+   [nil,  
+    st(ready,
+       wait4s ! wait4(g2dname,nil,
+                      req('logreq,ql('loadg2dlib g2dname fname),reqQ')), 
+       reqQ,
+       es,
+       log), OutQ 
+     g2dname '\n mname '\n toks' maudePrompt]
+   if  mname := getMaudeName(es)
+   /\ ?string :=  withAck("(load " + squote(string(fname)) + ")", mname,g2dname) 
+   /\ toks' := str2toks(?string) .
+
+******************************************************************************
+**** sending an expression to execute
+******************************************************************************
+  eq isReq('g2dexe) = true .
+  eq enabled(wait4s,req('g2dexe,ql(g2dname toks),reqQ)) = 
+      not(waiting4(wait4s,g2dname)) .
+
+  crl[g2dexe]:
+   [nil,
+    st(processing(req('g2dexe,ql(g2dname toks),reqQ')), 
+       wait4s,reqQ,es,log), 
+    OutQ]
+     =>
+   [nil,  
+    st(ready,
+       wait4s ! wait4(g2dname,nil,
+                      req('logreq,ql('g2dexe g2dname toks),reqQ')), 
+       reqQ,
+       es,
+       log), OutQ 
+     g2dname '\n mname '\n toks' maudePrompt]
+   if  mname := getMaudeName(es)
+   /\ ?string :=  withAck(removeBQs(qidl2str(toks),0,""), mname,g2dname) 
+   /\ toks' := str2toks(?string) .
+endm
+**** loadmaude loaded sequencer.maude
+mod SEQUENCER is
+  inc MY-META-ALL .
+  inc SCHEDULER .         *** inc CONTROL, ENTRY, QID-UTILITIES, META-LEVEL 
+                             *** inc QID-LIST, CONVERSION
+
+**** splits off first atom or balanced paren group from toks
+****  op splitParen : QidList -> SplitQidResult .
+
+var ctl : Control .
+var wait4s : Wait4Set .
+var reqQ reqQ' : RequestQ .
+var ee? : Entry? .
+vars log log'  : Log .
+vars es es' : ESet .
+
+vars InQ OutQ toks toks' toks0 toks1 : QidList .
+var ?string : String .
+var b : Bool .
+var rid : Qid .
+
+******************************************************************************
+**** sequencing requests
+******************************************************************************
+**** simple minded conversion of sequence of requests into one continued req
+
+  op toks2seq : QidList RequestQ -> RequestQ .
+  ceq toks2seq(toks,reqQ) =
+    (if b 
+     then req(rid,ql(toks0),toks2seq(toks1,reqQ))
+     else reqQ
+     fi)
+   if {b,'`( rid toks0 '`),toks1} := splitParen(toks)  .
+
+   eq toks2seq(toks,reqQ) = reqQ [owise] .
+
+
+  eq isReq('seq) = true .
+  eq enabled(wait4s,req('seq,ql(toks),reqQ)) = true .
+
+  rl[seq]:
+   [nil,
+    st(processing(req('seq,ql(toks),reqQ')), wait4s,reqQ,es,log), 
+    OutQ]
+     =>
+   [nil,  st(ready, wait4s, toks2seq(toks,reqQ'), es, log), OutQ] .
+
+endm
+**** loadmaude loaded listener.maude
+mod LISTENER is
+  inc MY-META-ALL .
+  inc SCHEDULER .         *** inc CONTROL, ENTRY, QID-UTILITIES, META-LEVEL 
+                             *** inc QID-LIST, CONVERSION
+
+var ctl : Control .
+var wait4s : Wait4Set .
+var reqQ reqQ' : RequestQ .
+var ee? : Entry? .
+vars log log'  : Log .
+vars es es' : ESet .
+
+vars InQ outQ toks toks' toks0 toks1 : QidList .
+var ?string : String .
+var b : Bool .
+vars name reqid gname g2dname : Qid .
+
+
+******************************************************************************
+***** start Listener  --- this should go away
+******************************************************************************
+  eq isReq('startListener) = true .
+  eq enabled(wait4s,req('startListener,ql(name reqid toks),reqQ)) = true .
+**** not(waiting4(wait4s,name)) .
+
+  rl[startListener]:
+   [nil,
+    st(processing(req('startListener, ql(name reqid toks),reqQ')), 
+       wait4s,reqQ,es,log), 
+    outQ]
+     =>
+   [nil,  
+    st(ready,
+****       (wait4s ! wait4(name,nil, req(reqid,ql(toks),nil))), 
+      wait4s !
+      (if waiting4(wait4s,name) 
+       then mt else wait4(name,nil, req(reqid,ql(toks),nil)) fi), 
+       (reqQ reqQ'),
+       es,
+       log), outQ ] .
+ 
+
+****  eq isReq('graphreq) = true .
+  eq enabled(wait4s,req('graphreq,ql(g2dname gname reqid toks),reqQ)) = 
+      not(waiting4(wait4s,g2dname)) and not(waiting4(wait4s,gname)) .
+
+rl[graphreq]:
+   [nil,
+    st(processing(req('graphreq, ql(g2dname gname reqid toks),reqQ')), 
+       wait4s,reqQ,es,log), 
+    outQ]
+     =>
+   [nil,  
+    st(ready,
+       (wait4s !
+**** resume listening for gname reqs
+        wait4(gname, nil, req('graphreq,ql(g2dname),nil))),  
+*** gname supplied --should also supply g2dname
+       (reqQ req(reqid, ql(gname g2dname toks), reqQ')),
+       es,
+       log), outQ  ] .
+
+
+******************************************************************************
+***** start cListener
+******************************************************************************
+  eq isReq('startcListener) = true .
+  eq enabled(wait4s,req('startcListener,ql(name reqid toks),reqQ)) = true .
+****      not(waiting4(wait4s,name)) .
+
+  rl[startcListener]:
+   [nil,
+    st(processing(req('startcListener, ql(name reqid toks),reqQ')), 
+       wait4s,reqQ,es,log), 
+    outQ]
+     =>
+   [nil,  
+    st(ready,
+        (if waiting4(wait4s,name)
+         then wait4s
+         else (wait4s ! wait4(name,nil, creq(reqid,nil,ql(toks),nil)))
+         fi), 
+       (reqQ reqQ'),
+       es,
+       log), outQ ] .
+ 
+
+********************************************************************************
+**** restarting listener
+****  eq isReq('restartingListener) = true .
+  eq enabled(wait4s,creq('restartingListener,name reqid toks',ql(toks),reqQ))
+              = true .
+
+rl[restartingListener]:
+   [nil,
+    st(processing(creq('restartingListener,name reqid toks',ql(toks),reqQ')), 
+       wait4s,reqQ,es,log), 
+    outQ]
+     =>
+   [nil,  
+    st(ready,
+**** resume listening for name reqs
+       (wait4s ! wait4(name, nil, creq('restartingListener,nil,ql(toks),nil))),  
+*** gname supplied --should also supply g2dname
+       (reqQ req(reqid, ql(name toks toks'), reqQ')),
+       es,
+       log), outQ  ] .
+
+********************************************************************************
+**** onetime listener
+****  eq isReq('onetimeListener) = true .
+  eq enabled(wait4s,creq('onetimeListener,name reqid toks',ql(toks),reqQ))
+               = true .
+
+rl[onetimeListener]:
+   [nil,
+    st(processing(creq('onetimeListener, name reqid toks',ql(toks),reqQ')), 
+       wait4s,reqQ,es,log), 
+    outQ]
+     =>
+   [nil,  
+    st(ready,
+       wait4s, 
+       (reqQ req(reqid, ql(name toks toks'), reqQ')),
+       es,
+       log), outQ  ] .
+
+
+********************************************************************************
+**** serializing listener
+****  eq isReq('serializingListener) = true .
+  eq enabled(wait4s,creq('serializingListener,name reqid toks',ql(toks),reqQ))
+               = true .
+
+rl[serializingListener]:
+   [nil,
+    st(processing(creq('serializingListener, name reqid toks',ql(toks),reqQ')), 
+       wait4s,reqQ,es,log), 
+    outQ]
+     =>
+   [nil,  
+    st(ready,
+       wait4s, 
+       (reqQ req(reqid, ql(name toks toks'), 
+          req('startcListener, ql(name 'serializingListener toks), reqQ'))),
+       es,
+       log), outQ  ] .
+
+
+endm
+
+***(
+mod RFE is
+  inc REWRITE .
+  inc FILEMANAGER .
+  inc G2D .
+  inc SEQUENCER .
+endm
+)
+
+
+
