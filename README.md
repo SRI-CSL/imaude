@@ -1,2 +1,2 @@
 
-Shared libraries fos imaude (interactive maude) applications.
+Shared libraries for imaude (interactive maude) applications.
