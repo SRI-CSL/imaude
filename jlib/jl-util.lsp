@@ -21,6 +21,13 @@
 (define mkMtMap () (object ("java.util.HashMap")))
 (define mkMt () (object ("java.util.ArrayList")))
 
+;;; safe dget
+(define dgetS (obj tag default)
+  (if (instanceof object "java.util.Map")
+	  (let ((val (invoke obj "get" tag)))
+		  (if (isobject val) val default) )
+    default	))
+
 (define dget (obj tag default)
   (let ((val (invoke obj "get" tag)))
     (if (isobject val) val default)  ))
