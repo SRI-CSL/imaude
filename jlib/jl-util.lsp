@@ -23,7 +23,7 @@
 
 ;;; safe dget
 (define dgetS (obj tag default)
-  (if (instanceof object "java.util.Map")
+  (if (instanceof obj "java.util.Map")
 	  (let ((val (invoke obj "get" tag)))
 		  (if (isobject val) val default) )
     default	))
