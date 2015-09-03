@@ -508,6 +508,9 @@
 ;; write map of keys to string arrl 
 ;; key sep elt0 ... sep eltn-1
 (define saveMap2Arrl (fname hmap sep)
+  (apply saveMap2ArrlX fname hmap sep (boolean false)))
+
+(define saveMap2ArrlX (fname hmap sep append?)
   (let ((arrl (apply mkMt))
         (keys (invoke hmap "keySet")) )
     (for key keys 
@@ -519,12 +522,15 @@
          (invoke arrl "add" (invoke strb "toString"))
          ))
     (sinvoke "g2d.util.IO" "collection2File" arrl fname 
-        (object null)(boolean false))
+        (object null) append?)
  ))
 
 ;; write map of keys to string arrl 
 ;; key sep elt0 ... sep eltn-1
 (define saveMap2ArrlSorted (fname hmap sep)
+  (apply saveMap2ArrlSortedX fname hmap sep (boolean false)))
+
+(define saveMap2ArrlSortedX (fname hmap sep append?)
   (let ((arrl (apply mkMt))
         (keys (apply sortArrl (invoke hmap "keySet"))) )
       (for key keys 
@@ -536,7 +542,7 @@
          (invoke arrl "add" (invoke strb "toString"))
          ))
     (sinvoke "g2d.util.IO" "collection2File" arrl fname 
-        (object null)(boolean false))
+        (object null) append?)
  ))
 
 ;; loads file written by saveMap2Arrl
