@@ -609,4 +609,15 @@
 		dups				
 	))
 		
+;; extract name conversion map from table tab with cols mix cix
+(define tabNameCnv (tab mix cix)
+ (let ((map (apply mkMtMap)))
+   (for row (invoke tab "subList" (int 1) (invoke tab "size"))
+	   (let ((mname (invoke row "get" mix)))
+		  (if (isnull (invoke map "get" mname))
+			  (invoke map "put" mname (invoke row "get" cix)) )
+		 ))
+   map
+ ))
+
 		
