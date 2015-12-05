@@ -278,6 +278,19 @@
       (apply intersectsX a0 a1 len (+ cur (int 1)))
     ) ))
 
+;; does arrl1 contain every element of arrl0?
+(define containsAll (arrl0 arrl1)
+ (apply containsAllX arrl0 arrl1 (invoke arrl0 "size") (int 0))
+)
+
+(define containsAllX (arrl0 arrl1 len cur)
+ (if (>= cur len)
+   (boolean true)
+   (if (invoke arrl1 "contains" (invoke arrl0 "get" cur))
+	   (apply containsAllX arrl0 arrl1 len (+ cur (int 1)))
+	   (boolean false)
+	 )))
+
 ;; add elements of arrl1 to arrl0 if not there already
 ;; modifies arrl0
 ;; same result as arrUnion
@@ -463,6 +476,23 @@
    )        
   hm
   ))    
+
+;;; assume table key,val -- or key,
+(define loadMapD (fname default)
+  (let ((arrl (apply loadCSV fname))
+        (hm (apply mkMtMap))
+       )
+   (for row arrl
+	   (let ((key (invoke row "get" (int 0)))
+		       (val (if (> (invoke row "size") (int 1))
+					        (invoke row "get" (int 1))
+								  default))
+					 )
+     (invoke hm "put" key val)
+		 ))        
+  hm
+  ))    
+
 
 (define loadMapT (fname)
   (let ((arrl (apply loadTab fname))
