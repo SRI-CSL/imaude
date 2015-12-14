@@ -2,6 +2,24 @@
 
 (define print2err (str) (invoke java.lang.System.err "println" str))
 
+(define getBufferedReader (fname)
+ (let ((fnameX (sinvoke "g2d.util.IO" "interpretTilde" fname))
+       (file (object ("java.io.File" fnameX)))
+      )
+   (if (invoke file "exists")
+     (object ("java.io.BufferedReader" 
+		            (object ("java.io.FileReader" file)) ))
+     (object null))
+	 ))
+
+(define getPrintWriter (fname append?)
+ (let ((fnameX (sinvoke "g2d.util.IO" "interpretTilde" fname))
+       (fwriter (object ("java.io.FileWriter" fnameX append?)))
+      )
+    (object ("java.io.PrintWriter" fwriter (boolean true)))
+	 ))
+
+
 (define removeLast (str n)
  (invoke str "substring" (int 0) (- (invoke str "length") n))  
 )
