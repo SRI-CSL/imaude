@@ -275,7 +275,16 @@
     (apply toArrl marrl)
  ))
 
-(define mapArrlSetS (arrl fun)(let ((marrl (object ("java.util.HashSet"))))   (for elt arrl (let ((res (apply mfun elt)))(if (isobject res) (invoke marrl "addAll" res)))) marrl))
+(define mapArrlSetS (arrl mfun)(let ((marrl (object ("java.util.HashSet"))))   (for elt arrl (let ((res (apply mfun elt)))(if (isobject res) (invoke marrl "addAll" res)))) marrl))
+
+	;; form set union of map(sym) for sym in syms
+	(define mapRngUnion (syms map)   
+	  (let ((res (apply mkMtSet)))
+	    (for sym syms 
+			  (let ((vals (invoke map "get" sym)))
+				  (if (isobject vals) (invoke res "addAll" vals))) )
+	   (apply toArrl res)
+		))
 
 ;; elements of col0 that are not in col1
 (define diff (col0 col1)
@@ -284,6 +293,7 @@
      (if (not (invoke col1 "contains" elt)) (invoke res "add" elt) ))
    res
  ))
+
 
 (define intersect (a0 a1) (apply diff a0 (apply diff a0 a1)))
 
