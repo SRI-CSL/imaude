@@ -520,6 +520,19 @@
 		 ))        
   hm
   ))    
+;;; assume table key,val
+(define loadMapInvD (fname)
+  (let ((arrl (apply loadCSV fname))
+        (hm (apply mkMtMap)) )
+   (for row arrl
+	   (let ((key (invoke row "get" (int 0)))
+		       (val (if (> (invoke row "size") (int 1))
+					        (invoke row "get" (int 1))
+								  key)) )
+     (invoke hm "put" key val)
+   ))    
+   hm
+  ))
 
 
 (define loadMapT (fname)
