@@ -537,7 +537,7 @@
   ))
 
 ;;; val -> some key
-(define loadMapInvD (fname)
+(define loadMapInvDX (fname)
   (let ((arrl (apply loadCSV fname))
         (hm (apply mkMtMap)) )
    (for row arrl
