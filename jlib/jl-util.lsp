@@ -161,6 +161,8 @@
    (for elt dom (apply arrlUnion res (apply dget map elt (apply mkMt))))
  ))
 
+;; assuming map partitions union of range lists,
+;; this inverts the map
 (define mapLInv (map) 
   (let ((imap (apply mkMtMap))) 
 	  (for key (invoke map "keySet") 
