@@ -161,6 +161,13 @@
    (for elt dom (apply arrlUnion res (apply dget map elt (apply mkMt))))
  ))
 
+(define mapLInv (map) 
+  (let ((imap (apply mkMtMap))) 
+	  (for key (invoke map "keySet") 
+		  (let ((vals (invoke map "get" key))) 
+			  (for val vals (invoke imap "put" val key)) )) 
+ 	imap))
+
 ;; add elt to list associated to key
 ;; init with empty list if no association exists
 (define mapAdd (map key elt)
