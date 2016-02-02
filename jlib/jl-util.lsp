@@ -170,6 +170,13 @@
 			  (for val vals (invoke imap "put" val key)) )) 
  	imap))
 
+;; result is inverse image of each elememt in range
+(define mapInvIm (map)
+  (let ((imap (apply mkMtMap))) 
+	  (for key (invoke map "keySet") 
+		  (apply mapAdd imap (invoke map "get" key) key))
+ 	imap))
+
 ;; add elt to list associated to key
 ;; init with empty list if no association exists
 (define mapAdd (map key elt)
