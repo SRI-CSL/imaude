@@ -324,9 +324,14 @@
 
 ;; does arrl1 contain every element of arrl0?
 (define containsAll (arrl0 arrl1)
- (apply containsAllX arrl0 arrl1 (invoke arrl0 "size") (int 0))
+  (invoke arrl0 "containsAll" arrl1)
+;; (apply containsAllX arrl0 arrl1 (invoke arrl0 "size") (int 0))
 )
 
+(define sameArrl (arrl0 arrl1)
+  (and (invoke arrl0 "containsAll" arrl1)
+       (invoke arrl1 "containsAll" arrl0)) )
+			
 (define containsAllX (arrl0 arrl1 len cur)
  (if (>= cur len)
    (boolean true)
