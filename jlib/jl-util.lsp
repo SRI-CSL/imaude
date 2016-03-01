@@ -440,7 +440,13 @@
 (define lcurly "{") (define rcurly "}")
 (define lsq "[") (define rsq "]")
 
-;;;;;;;;;; reading/writing tables/rows
+;;;;;;;;;; reading/writing arrls/tables/rows ....
+
+(define saveArrl (arrl fname)(sinvoke "g2d.util.IO" "collection2File" arrl fname (object null) (boolean false)))
+
+(define loadArrl (fname) (let ((arrl (object ("java.util.ArrayList")))) (sinvoke "g2d.util.IO" "file2Collection" arrl fname (object null)(boolean true)) arrl))
+
+
 
 (define unsplit (row sep)
  (let ((strb (object ("java.lang.StringBuffer")))
