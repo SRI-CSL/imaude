@@ -86,6 +86,16 @@
 	res
 	))
 
+(define mkMap1 (key val)
+  (let ((res (apply mkMtMap)))
+	  (invoke res "put" key val)
+		res	))
+
+(define mkMap2 (key0 val0 key1 val1)
+  (let ((res (apply mkMap1 key0 val0)))
+	  (invoke res "put" key1 val1)
+		res	))
+
 ;; objs is a collection of maps  
 (define getByName (objs str)
   (apply getByNameX objs str (invoke objs "size") (int 0)))    
