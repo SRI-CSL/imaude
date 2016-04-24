@@ -100,6 +100,21 @@
       ))
 ))
 
+
+;;; 1 if nstr0 > nstr1  (as integers)
+;;; -1 if nstr0 < nstr1  (as integers)
+;;; 0 if nstr0 = nstr1 
+(define numeralCompare (nstr0 nstr1)
+ (if (= nstr0 nstr1) 
+   (int 0)
+  (if (> (sinvoke "java.lang.Integer" "parseInt" nstr0)
+         (sinvoke "java.lang.Integer" "parseInt" nstr1))
+	  (int 1)
+	  (int -1)
+	 ))
+  )
+	
+
 (define isArray (obj) (invoke (invoke obj "getClass") "isArray"))
 
 (define isInt (str) 
