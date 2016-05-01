@@ -19,6 +19,22 @@
     (object ("java.io.PrintWriter" fwriter (boolean true)))
 	 ))
 
+;;;; saving as json -- pretty
+(define initGsonPretty ()
+ (let ((ioplib (sinvoke "g2d.util.IO" "interpretTilde"
+                       "~/Repositories/IOP++/lib"))
+      (dummy (load (concat ioplib "/gson.jar")))
+      (gsonbuilder (invoke (object ("com.google.gson.GsonBuilder")) 
+			                     "setPrettyPrinting"))
+     )     													 
+   (invoke gsonbuilder "create")))
+
+(define prettyJson2File (gson jthing fname)
+  (let ((pretty (invoke gson "toJson" jthing)))
+   (sinvoke "g2d.util.IO" "string2File" pretty fname)
+ ))
+
+
 
 (define removeLast (str n)
  (invoke str "substring" (int 0) (- (invoke str "length") n))  
