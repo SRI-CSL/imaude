@@ -19,6 +19,39 @@
     (object ("java.io.PrintWriter" fwriter (boolean true)))
 	 ))
 
+(define fileExists (fname)
+  (let ((fnameX (sinvoke "g2d.util.IO" "interpretTilde" fname))
+        (file (object ("java.io.File" fnameX))) )
+    (invoke file "exists")
+  ))
+
+;; returns false if dname exists and is not a directory
+;; returns true if is already directory or directory is created
+(define assureDir (dname)
+  (let ((dnameX (sinvoke "g2d.util.IO" "interpretTilde" dname))
+        (file (object ("java.io.File" dnameX))) )
+   (if (invoke file "exists")
+	    (invoke file "isDirectory")
+			(invoke file "mkdirs")
+  )))
+
+;;;;;;;;;;;  json I/)
+;;; reading json
+;; returns json java object parsed from fname
+;; returns null if file does not exist
+(define readJSonF (fname)
+  (let ((fnameX (sinvoke "g2d.util.IO" "interpretTilde" fname))
+        (file (object ("java.io.File" fnameX)))
+        (reader (if (invoke file "exists")
+                    (object ("java.io.FileReader" fnameX))
+                    (object null)))
+        )
+   (if (isnull reader)
+       (seq (invoke java.lang.System.err "println"  "no reader") (object null) )
+       (sinvoke "org.json.simple.JSONValue" "parseWithException" reader)
+  )))
+
+
 ;;;; saving as json -- pretty
 (define initGsonPretty ()
  (let ((ioplib (sinvoke "g2d.util.IO" "interpretTilde"
