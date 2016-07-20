@@ -230,6 +230,15 @@
   hm
   ))
 
+;;; restrict range of map to scope
+(define restrictmapi (map scope) 
+(let ((res (apply mkMtMap)))
+  (for key (invoke map "keySet")
+	   (let ((vals (apply intersect (invoke map "get" key) scope)))
+		   (if (> (invoke vals "size") (int 0)) (invoke res "put" key vals)) ))
+  res ))
+
+
 (define mapRng (map dom)
  (let ((res (apply mkMt)))
    (for elt dom (apply arrlUnion res (apply dget map elt (apply mkMt))))
