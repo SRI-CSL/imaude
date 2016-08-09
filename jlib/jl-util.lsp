@@ -742,6 +742,24 @@
         (object null) append?)
  ))
 
+ ;; write map of keys to string arrl using cnv map if not null and sorting rng
+ ;; key sep elt0 ... sep eltn-1
+ (define saveMap2ArrlSortedC (fname hmap sep cnv append?)
+   (let ((pr (apply getPrintWriter fname append?))
+         (keys (apply sortArrl (invoke hmap "keySet"))) )
+      (for key keys 
+        (let ((strb (object ("java.lang.StringBuffer")))
+              (vals0 (invoke hmap "get" key))
+              (vals1 (if (isnull cnv) vals0 (apply mapArrl vals0 cnv)))
+              (vals (apply sortArrl vals1))
+             )
+          (invoke strb "append" key)
+          (for val vals
+               (seq (invoke strb "append" sep) (invoke strb "append" val)))
+          (invoke pr "println" (invoke strb "toString"))
+          ))
+    (invoke pr "close")  ))
+
 ;; loads file written by saveMap2Arrl
 (define loadMap2Arrl (fname sep)
   (let ((arrl (apply mkMt))
