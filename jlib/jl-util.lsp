@@ -260,6 +260,14 @@
 		  (apply mapAdd imap (invoke map "get" key) key))
  	imap))
 
+ (define mapInvImX (map keys)
+   (let ((imap (apply mkMtMap))) 
+ 	  (for key keys
+      (let ((val (invoke map "get" key)))
+        (if (isobject val) (apply mapAdd imap val key))))
+  	imap))
+
+
 ;; add elt to list associated to key
 ;; init with empty list if no association exists
 (define mapAdd (map key elt)
@@ -741,6 +749,8 @@
     (sinvoke "g2d.util.IO" "collection2File" arrl fname 
         (object null) append?)
  ))
+ 
+ 
 
  ;; write map of keys to string arrl using cnv map if not null and sorting rng
  ;; key sep elt0 ... sep eltn-1
@@ -757,6 +767,7 @@
           (for val vals
                (seq (invoke strb "append" sep) (invoke strb "append" val)))
           (invoke pr "println" (invoke strb "toString"))
+          (invoke pr "println" "")
           ))
     (invoke pr "close")  ))
 
