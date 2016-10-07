@@ -2,6 +2,15 @@
 
 (define print2err (str) (invoke java.lang.System.err "println" str))
 
+(define canonical_path (str)
+  (let ((str0 (sinvoke "g2d.util.IO" "interpretTilde" str))
+	(file0 (object ("java.io.File" str0)))
+	(str1 (invoke file0 "getCanonicalPath")))
+    str1
+    )
+  )
+  
+
 (define getBufferedReader (fname)
  (let ((fnameX (sinvoke "g2d.util.IO" "interpretTilde" fname))
        (file (object ("java.io.File" fnameX)))
