@@ -402,15 +402,10 @@
 	   (apply toArrl res)
 		))
 
-(define mx2apmap (mxids mpmap)
+(define mapMap (map fun) 
   (let ((res (apply mkMtMap)))
-    (for id mxids
-      (let ((aps (invoke mpmap "get" id)))
-        (if (isobject aps) 
-          (invoke res "put" id
-                       (apply sortArrl (apply aps2hsyms aps))) 
-        )))
-    res )) 
+   (for key (invoke map "keySet") 
+    (invoke res "put" key (apply fun (invoke map "get" key))) ) res))
 
 ;; elements of col0 that are not in col1
 (define diff (col0 col1)
