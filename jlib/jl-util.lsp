@@ -10,7 +10,7 @@
     )
   )
   
-
+;;;(invoke br "readLine")
 (define getBufferedReader (fname)
  (let ((fnameX (sinvoke "g2d.util.IO" "interpretTilde" fname))
        (file (object ("java.io.File" fnameX)))
@@ -401,6 +401,16 @@
 				  (if (isobject vals) (invoke res "addAll" vals))) )
 	   (apply toArrl res)
 		))
+
+(define mx2apmap (mxids mpmap)
+  (let ((res (apply mkMtMap)))
+    (for id mxids
+      (let ((aps (invoke mpmap "get" id)))
+        (if (isobject aps) 
+          (invoke res "put" id
+                       (apply sortArrl (apply aps2hsyms aps))) 
+        )))
+    res )) 
 
 ;; elements of col0 that are not in col1
 (define diff (col0 col1)
