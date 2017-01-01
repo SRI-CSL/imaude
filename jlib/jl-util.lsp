@@ -21,6 +21,13 @@
      (object null))
 	 ))
 
+(define readTilEnd (br fun) 
+  (let ((line (invoke br "readLine"))) 
+    (if (isobject line) 
+      (seq (apply fun line) (apply readTilEnd br fun)) 
+      (boolean true)) ))
+     
+
 (define getPrintWriter (fname append?)
  (let ((fnameX (sinvoke "g2d.util.IO" "interpretTilde" fname))
        (fwriter (object ("java.io.FileWriter" fnameX append?)))
@@ -76,6 +83,8 @@
    (sinvoke "g2d.util.IO" "string2File" pretty fname)
  ))
 
+
+(define prArr (arr) (sinvoke "java.util.Arrays" "toString" arr))
 
 
 (define removeLast (str n)
@@ -215,6 +224,12 @@
     (if (invoke matcher "matches")
 	(boolean true)
       (boolean false)))))
+
+(define subarrl (arrl start end) 
+  (let ((res (apply mkMt)))
+    (for ix end (if (>= ix start)
+    (invoke res "add" (invoke arrl "get" ix)))) res ))
+
 
 (define subarray (arrl ixs)
   (let ((sarrl (object ("java.util.ArrayList"))))
