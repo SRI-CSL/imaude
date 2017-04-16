@@ -1533,6 +1533,32 @@ mod FILEMANAGER is
     maudePrompt ] .   
  
 ******************************************************************************
+****  filewriteAct asking aname to write
+******************************************************************************
+
+ eq isReq('filewriteAct) = true .
+  eq enabled(wait4s,req('filewriteAct,ql(aname fname mode toks),reqQ0)) =
+      not(waiting4(wait4s,aname)) .
+
+**** (filewrite  fname mode toks)
+****  mode =  A for append anything else will overwrite
+ rl[filewriteAct]:
+   [nil,
+    st(processing(req('filewriteAct,ql(aname fname mode toks),reqQ0)),
+       wait4s,reqQ,es,log), 
+    OutQ]
+     =>
+   [nil,  
+    st(ready, 
+       wait4s ! wait4(aname,'write fname mode,
+                       req('logreq, ql('filewriteAct aname fname mode), reqQ0)),
+       reqQ,es,log),
+    OutQ aname '\n  'maude 
+         '\n (if mode == 'A then 'append else 'write fi)
+         '\n  fname '\n toks 
+    maudePrompt ] .   
+ 
+******************************************************************************
 **** fileread  fname  vname
 **** puts result minus filemanager token in vname
 **** filemanager contents <file>  <text>
@@ -1557,6 +1583,33 @@ mod FILEMANAGER is
         wait4('graphics2d,'read fname, creq('setqval,nil,ql(vname ), reqQ0)),
        reqQ,es,log),
     OutQ 'graphics2d '\n  'maude '\n 'read '\n fname ]  .   
+
+
+******************************************************************************
+**** filereadAct aname  fname  vname
+**** puts result minus filemanager token in vname
+**** filemanager contents <file>  <text>
+**** or 
+**** filemanager readFailure <file>
+******************************************************************************
+
+  eq isReq('filereadAct) = true .
+  eq enabled(wait4s,req('filereadAct,ql(aname fname vname toks),reqQ0)) =
+      not(waiting4(wait4s,aname)) .
+
+**** (fileread fname vname)
+ rl[filereadAct]:
+   [nil,
+    st(processing(req('filereadAct,ql(aname fname vname toks),reqQ0)), 
+       wait4s,reqQ,es,log), 
+    OutQ]
+     =>
+   [nil,  
+    st(ready, 
+       wait4s ! 
+        wait4(aname,'read fname, creq('setqval,nil,ql(vname ), reqQ0)),
+       reqQ,es,log),
+    OutQ aname '\n  'maude '\n 'read '\n fname ]  .   
 
 
 ******************************************************************************
@@ -1589,6 +1642,27 @@ mod FILEMANAGER is
 
 
 ******************************************************************************
+****  saving state using specified actor
+******************************************************************************
+  eq isReq('saveAct) = true .
+  eq enabled(wait4s,req('saveAct,ql(aname fname mode stype toks),reqQ0)) = true .
+ crl[saveAct]:
+   [nil,
+    st(processing(req('saveAct,ql(aname fname mode stype toks),reqQ0)), 
+        wait4s,reqQ,es,log), 
+    OutQ]
+     =>
+   [nil,  
+    st(ready, wait4s,
+       (reqQ req('filewriteAct,
+                  ql(aname fname mode toks'),
+                  req('logreq,ql('save  aname fname  mode stype toks), reqQ0))),
+       es,log),
+    OutQ ] 
+  if toks' :=  showState(st(ready,wait4s,reqQ,es,log),stype toks) .
+
+
+******************************************************************************
 **** restoring entry / eset
 ******************************************************************************
   eq isReq('restore) = true .
@@ -1606,6 +1680,31 @@ mod FILEMANAGER is
     st(ready, wait4s,
        (reqQ req('fileread,
                   ql(fname vname),
+                  req('parseRestored,ql(vname stype toks), 
+                      req('logreq,ql('restore fname vname stype toks),
+                          reqQ0)))),
+       es,log),
+    OutQ ] .
+
+
+******************************************************************************
+**** restoring entry / eset using aname
+******************************************************************************
+  eq isReq('restoreAct) = true .
+  eq enabled(wait4s,req('restoreAct,ql(aname fname vname stype toks),reqQ0)) = true .
+
+****                  tmp var for unparsed data
+**** (restoreAct aname fname vname stype)
+ rl[restoreAct]:
+   [nil,
+    st(processing(req('restoreAct,ql(aname fname vname stype toks),reqQ0)), 
+        wait4s,reqQ,es,log), 
+    OutQ]
+     =>
+    [nil,  
+    st(ready, wait4s,
+       (reqQ req('filereadAct,
+                  ql(aname fname vname),
                   req('parseRestored,ql(vname stype toks), 
                       req('logreq,ql('restore fname vname stype toks),
                           reqQ0)))),
