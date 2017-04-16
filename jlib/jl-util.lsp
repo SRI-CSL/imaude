@@ -1,6 +1,33 @@
 ;; jl-util.lsp
 
+
 (define print2err (str) (invoke java.lang.System.err "println" str))
+
+;; [iam 3/7/2017: migrated from util.lsp] return the accumulation
+(define map (col mfun accum) (seq (for elt col (apply mfun elt accum)) accum))
+
+
+;; [iam 3/7/2017: migrated from util.lsp] delete without side effect
+(define ldelete (list obj)
+  (let ((l (invoke list "clone"))) (seq  (invoke l "remove" obj) l))
+)
+
+;; [iam 3/7/2017: migrated from util.lsp] itemPrinter is a printer for the collection item type
+;;  (apply itemPrinter elt strbuffer) should append print string to passed buffer
+(define printCol (col itemPrinter)
+  (let ((strb (object ("java.lang.StringBuffer"))) )
+    (seq
+      (for item col (apply itemPrinter item strb))
+       (invoke strb "toString")
+     )
+  )
+)
+
+;;[iam 3/7/2017: migrated from util.lsp]
+(define printArr (arr)(apply printCol arr 
+    (lambda (elt strb) (invoke strb "append" (concat elt " ")))))
+
+
 
 (define canonical_path (str)
   (let ((str0 (sinvoke "g2d.util.IO" "interpretTilde" str))
@@ -192,6 +219,7 @@
   )
 	
 
+;; test for array -- instanceof doesn't work for arrays
 (define isArray (obj) (invoke (invoke obj "getClass") "isArray"))
 
 (define isInt (str) 
