@@ -1,5 +1,5 @@
 **** loadmaude loaded simple.maude
-***(
+
 fmod SIMPLE is
   pr NAT .
   inc MODEL-CHECKER .
@@ -140,7 +140,7 @@ fmod SIMPLE is
           getFPath(P:Prop, modelCheck(S:State, ~ <> P:Prop)) .
 
 endfm
-)
+
 **** loadmaude loaded val.maude
 **** Collection of value sorts for notes and entries
 **** Top-level Val 
