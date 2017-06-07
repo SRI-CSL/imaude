@@ -5,7 +5,7 @@ IMaude is a set of Maude Modules to be used in conjuction
 with the [Maude system](http://maude.cs.uiuc.edu) and the
 [IOP Platform](https://github.com/SRI-CSL/iopc)
  to program interactive Maude applications.  It is used in systems such as the 
- [Pathway Logic Assistant(http://pl.csl.sri.com/) and the [Maude-NPA System](http://maude.cs.illinois.edu/w/index.php?title=Maude_Tools:_Maude-NPA) and its [GUI.](http://www.csl.sri.com/users/iam/NPA/index.html)
+ [Pathway Logic Assistant](http://pl.csl.sri.com/) and the [Maude-NPA System](http://maude.cs.illinois.edu/w/index.php?title=Maude_Tools:_Maude-NPA) and its [GUI.](http://www.csl.sri.com/users/iam/NPA/index.html)
 
 Contents
 ---------
