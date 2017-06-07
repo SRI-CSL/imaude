@@ -1,0 +1,13 @@
+Interactive Maude framework.
+
+This directory contains the implementation of IMaude -- with support
+of maude interaction with the user and other tools.
+
+doc-imaude.txt describes the structure of IMaude states and
+               the requests that can be handled by IMaude
+doc-using.txt explains how to use IMaude, specifically how to try the exmple.
+
+IMaude can be used from a shell for more interactive rewriting
+working in the  module REWRITE or as an iop actor, in which case
+there is additional capability for manipulating files, sockets ...
+

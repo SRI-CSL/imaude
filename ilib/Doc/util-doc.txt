@@ -1,0 +1,116 @@
+The files in Lib/Util are the following
+
+val.maude
+  Collection of value sorts for notes and entries
+  VAL -- Top-level Val 
+
+  Useful cases 
+    SVAL --- SVal (strings sv(str))
+    QVAL --- QVal (qidlists q(qids))
+    TVAL --- TVal (terms tm(modname,tm))
+    QSTVAL --- includes all three
+
+val-io.maude
+  SPLIT-PAREN --- sexp token parsing utility splits off next sexp token list
+  VAL-IO --- declares showVal, parseVal and defines defaults
+         --- must be defined for each Val subsort
+  QVAL-IO, SVAL-IO, TVAL-IO  --- do this for the basic val sorts
+  QSTVAL-IO --- assembles all for testing and other conveniences
+
+notes.maude             
+  requires val.maude
+  General Notes data type
+  NOTES     extends Array{String,ValD} with lookupd 
+  <X>NOTES includes <X>VAL  for X in S Q T
+  QSTNOTES combines all three
+
+notes-io.maude
+  requires val-io.maude, stringout.maude
+  NOTES-IO declares/defines showNote, showNotes
+  QSTNOTES-IO joins NOTES-IO and QSTVAL-IO 
+
+
+mset.maude       
+  MSET{X :: TRIV} 
+     - parameterized multiset module 
+     ala SET{X :: TRIV} with added count function
+     empty ~ none,  concat ~ __
+  LIST-AND-MSET{X :: TRIV} inc LIST{X} . inc MSET{X} .
+     ala LIST-AND-SET{X :: TRIV} but with MSETs (to avoid META-LEVEL whining)
+
+natqid.maude -- Utilities for Nat and Qid lists and sets
+  XLIST{X :: TRIV} extends LIST-MSET with additional list ops
+  NATS = XLIST{Nat}  QIDS = XLIST{Qid}
+  NAT-QID -- extends NATS and QIDS with mappings between sorts
+
+stringout.maude
+  STRING-OUTPUT-HACK -- String output hack
+  str2toks(str)  metaPrettyPrint(['QID], mkStrConst(str)) 
+          to ouput a string str within loop mode 
+  tok2str should invert, but fails to do so  \<white> or blank is ok \" breaks
+
+templates.maude
+  TEMPLATES --- string patterns and substitution for string construction
+       fillTemplate(pat,bindings)
+
+sexp.maude
+  SEXP 
+   An sexpression is an atom or a list of sexpressions [sexpl]
+   Atoms include coerced strings a("abc")
+   PARSE-SEXP-STRING --- parsing string representation of SEXPs
+   PARSE-SEXP-QIDS --- parsing tokenized SEXP string
+      (also sexp2qids)
+
+
+protein-metadata.maude  
+  manipulating merrills protein metadata
+  should move into IPLA  
+
+simple.maude
+  SIMPLE -- for processing counter examples
+  getPath(ce,prop) -- simple path to first state satisfying prop  
+  getFPath(ce,prop) -- full path to first state satisfying prop
+  mc2Rules(ce) --- list of rule names in ce
+  getState  getSPRuleNames extract state and rulelist component from spath
+
+
+graph.maude     
+  requires notes.maude (and val.maude)
+  GRAPH --- graph(gid,notes,nodes,edges)  --- nodes and edges are lists 
+    node ids are Nats -- could be abstracted, but ...
+    functions for getting info from a graph
+    getNode(nodes, att, val) = first node with att having val
+    findNode(ndl, att,val) =  nodeid  of above
+    getNodes(nodes, att, val) = all nodes with att having val
+    nodes2natl(nodes) = list of node ids
+
+    **** member(edge,edl) >> occurs(edge,edl)
+    **** diff(edl,edl') >> lDiff(edl,edl') 
+    **** ditto node, ndl
+    **** Structures for generating graph, to help generating new ids
+    {nodel,nat} : Nodes .
+    {nodes,natl} : getNodesResult .
+
+graph-io.maude
+  requires notes-io.maude (and its requirees)
+  GRAPH-IO 
+    GRAPH, NOTES-IO 
+    showNode(node) parseNode(qidl)
+    showNodeList(ndl) parseNodeList(qidl)
+    showEdge(edge) parseEdge(qidl)
+    showEdgeList(edl) parseEdgeList(qidl)
+    showGraph(graph) parseGraph(qidl)
+    showGraph(graph) parseGraph(qidl)
+
+graph2dot.maude         
+  GRAPH2DOT -- prints graph as dot string
+    graph2dot(graph(id,notes, ndl, edl))
+    using only SVAL for notes
+    should be upgraded to use templates
+
+gval.maude
+  GVAL --- defines graph values Gval < Val  gv(graph)
+
+gval-io.maude
+  GVAL-IO --- showVal(gv(graph))  parseVal('`( 'gval qidl '`)) .
+
