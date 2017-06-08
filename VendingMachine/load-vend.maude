@@ -1,0 +1,5 @@
+load vend
+load model-checker
+load ../ilib/load-lib
+
+loop init .

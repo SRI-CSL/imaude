@@ -1,0 +1,33 @@
+
+Maude> (letc vm0 VENDING-MACHINE-QUERY Marking $ $ $)
+Maude> (show entry tval vm0)
+  (entry tval(qidlist vm0)(notes)(tval VENDING-MACHINE-QUERY $ $ $))
+
+Maude> (rewritec 5 vm0 vm1)
+Maude> (show entry tval vm1)
+(entry tval(qidlist vm1)(notes)(tval VENDING-MACHINE-QUERY $ $ $ $ $ q q q))
+
+Maude> (frewritec 5 1 vm0 vm2)
+Maude> (show entry tval vm2)
+(entry tval(qidlist vm2)(notes)(tval VENDING-MACHINE-QUERY $ $ q q q a c))
+
+Maude> (applyc VENDING-MACHINE-QUERY coins getCoins vm2)
+Maude> (show entry tval coins)
+(entry tval(qidlist coins)(notes)(tval VENDING-MACHINE-QUERY $ $ q q q))
+
+Maude> (applyc VENDING-MACHINE-QUERY items getItems vm2)
+Maude> (show entry tval items)
+(entry tval(qidlist items)(notes)(tval VENDING-MACHINE-QUERY a c))
+
+Maude> (setqc rls buy-c buy-a buy-c)
+Maude> (applyrulesc vm0 vm3 rls)
+Maude> (show entry tval vm3)
+(entry tval(qidlist vm3)(notes)(tval VENDING-MACHINE-QUERY q a c c))
+
+Maude> (listrulesc vm2 vm2rules)
+Maude> (show entry qval vm2rules)
+(entry qval(qidlist vm2rules)(notes)(qval add-$ 47 add-q 47 buy-a 1 buy-c 1
+    change 0))
+
+
+

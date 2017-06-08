@@ -1,0 +1,39 @@
+load vend
+load model-checker
+load ../ilib/load-lib
+load vend-assistant
+
+loop init .
+
+
+(letc vm VENDING-MACHINE-QUERY Marking null)
+(setqc add-$ add-$)
+(setqc add-q add-q)
+(setqc buy-c buy-c)
+(setqc buy-a buy-a)
+(setqc change change)
+
+
+(seq
+  (setqc maudeName maude)
+  (setqc g2dName graphics2d)
+  (setqc g2dNVame graphics2d)
+**** load the vm jlambda code, which initializes the jlambda vm
+  (loadg2dlib graphics2d vend.lsp)   
+  (startListener vm vendreq graphics2d)
+) 
+
+***(
+(vm vend vm add-$)
+(apply vendUpdate vname (int dollars) (int quarters) (int apples) (int cake))
+
+"vend" "cmd"
+>>
+(vend vend cmd)
+>>
+(vend vm cmd)
+>>
+(applyrulesc vm vm cmd)
+(sendvmstatus )
+
+)

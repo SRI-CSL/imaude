@@ -1,0 +1,39 @@
+(show control)
+(show wait4s)
+(show requests)
+(show summary)
+(show entry tval vm)
+
+
+
+(letc vm0 VENDING-MACHINE-QUERY Marking $ $ $)
+(show entry tval vm0)
+(rewritec 5 vm0 vm1)
+(show entry tval vm1)
+(frewritec 5 1 vm0 vm2)
+(show entry tval vm2)
+
+
+(applyc VENDING-MACHINE-QUERY coins getCoins vm2)
+(show entry tval coins)
+
+(applyc VENDING-MACHINE-QUERY items getItems vm2)
+(show entry tval items)
+
+(setqc rls buy-c buy-a buy-c)
+(applyrulesc vm0 vm3 rls)
+(show entry tval vm3)
+
+(listrulesc vm2 vm2rules)
+(show entry qval vm2rules)
+
+**** saving and restoring
+(save vm0.txt C entry tval vm0 )
+(show entry tval vm0)
+
+(remove entry tval vm0)
+(show entry tval vm0)
+
+(restore vm0.txt tmp entry)
+(show entry tval vm0)
+

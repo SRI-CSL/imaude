@@ -1,0 +1,128 @@
+mod VEND-ASSISTANT is
+  inc RFE .
+
+******************************************************************************
+******************************************************************************
+
+var ctl : Control .
+var wait4s : Wait4Set .
+var reqQ reqQ' : RequestQ .
+var ee? : Entry? .
+vars log log'  : Log .
+vars es es' : ESet .
+
+vars InQ OutQ toks toks' : QidList .
+vars  modname fname vname mname g2dname g2dvname gname aname cmd  reqid : Qid .
+var ?string : String .
+vars term stateT  dT qT aT cT : Term .
+var res?? : [ResultPair?] .
+var bindings : TBinds .
+
+
+******************************************************************************
+**** handling a vend command
+**** the graphics2d vm has the same name as the maude vm
+******************************************************************************
+  eq isReq('vend) = true .
+  eq enabled(wait4s,req('vend,ql(vname g2dvname cmd toks),reqQ)) = true .
+
+  rl[vend]:
+   [nil,
+    st(processing(req('vend,ql(vname g2dvname cmd toks),reqQ')), 
+       wait4s,reqQ,es,log), 
+    OutQ]
+     =>
+   [nil,  
+    st(ready,
+       wait4s,
+       (reqQ 
+        req('applyrulesc, ql(vname vname cmd),
+             req('sendVendState, ql(vname g2dvname toks), reqQ'))),
+       es,
+       log), OutQ ] .
+   
+******************************************************************************
+**** 
+******************************************************************************
+  eq isReq('sendVendState) = true .
+  eq enabled(wait4s,req('sendVendState,ql(vname g2dvname toks),reqQ)) = 
+      not(waiting4(wait4s,g2dvname)) .
+
+  crl[sendVendState]:
+   [nil,
+    st(processing(req('sendVendState,ql(vname g2dvname toks),reqQ')), 
+       wait4s,reqQ,es,log), 
+    OutQ]
+     =>
+   [nil,  
+    st(ready,
+       wait4s ! wait4(g2dvname,nil,
+                      req('logreq,ql('sendVendState g2dvname vname),reqQ')), 
+       reqQ,
+       es,
+       log), OutQ 
+     g2dvname '\n mname '\n toks' maudePrompt]
+   if  mname := getMaudeName(es)
+   /\ ?string :=  withAck(mkVendStateExp(es,vname), mname,g2dvname) 
+   /\ toks' := str2toks(?string) .
+
+  op vendStateTemplate : -> String .
+  eq vendStateTemplate = 
+"(apply vendUpdate %vname\n\
+       (int %dollars) (int %quarters) (int %apples) (int %cakes))" .
+
+  op mkVendStateExp : ESet Qid -> String .
+  ceq mkVendStateExp(es,vname) =
+     fillTemplate(vendStateTemplate,bindings)
+  if tm(modname,term) := getVal(es,'tval,vname,dumTv) 
+  /\ res?? := metaReduce([modname], 'vm2state[term]) 
+  /\ stateT := (if res?? :: ResultPair
+                then getTerm(res??)
+                else 'vmState['0.Zero,'0.Zero,'0.Zero,'0.Zero] 
+                fi)
+  /\ bindings := (("%vname" :~  squote(string(vname))),
+                  ("%dollars" :~ vmStateT2Dollars(stateT)),
+                  ("%quarters" :~ vmStateT2Quarters(stateT)),
+                  ("%apples" :~ vmStateT2Apples(stateT)),
+                  ("%cakes" :~ vmStateT2Cakes(stateT))) .
+
+
+  ops vmStateT2Dollars vmStateT2Quarters  vmStateT2Apples vmStateT2Cakes 
+      : Term -> String .
+
+  eq vmStateT2Dollars('vmState[dT,qT,aT,cT]) = string(downTerm(dT,0),10) .
+  eq vmStateT2Quarters('vmState[dT,qT,aT,cT]) = string(downTerm(qT,0),10) .
+  eq vmStateT2Apples('vmState[dT,qT,aT,cT]) = string(downTerm(aT,0),10) . 
+  eq vmStateT2Cakes('vmState[dT,qT,aT,cT]) = string(downTerm(cT,0),10) . 
+
+  eq vmStateT2Dollars(stateT) = "0" [owise] .
+  eq vmStateT2Quarters(stateT) = "0" [owise] .
+  eq vmStateT2Apples(stateT) = "0" [owise] .
+  eq vmStateT2Cakes(stateT) = "0" [owise] .
+
+**************************************************************************
+**** vending machine listener
+**************************************************************************
+
+****  eq isReq('vendreq) = true .
+  eq enabled(wait4s,req('vendreq,ql(g2dvname vname reqid toks),reqQ)) = 
+      not(waiting4(wait4s,g2dvname)) and not(waiting4(wait4s,vname)) .
+
+rl[vendreq]:
+   [nil,
+    st(processing(req('vendreq, ql(g2dvname vname reqid toks),reqQ')), 
+       wait4s,reqQ,es,log), 
+    OutQ]
+     =>
+   [nil,  
+    st(ready,
+       (wait4s !
+**** resume listening for vname reqs
+        wait4(vname, nil, req('vendreq,ql(g2dvname),nil))),  
+       (reqQ req(reqid, ql(vname g2dvname toks), reqQ')),
+       es,
+       log), OutQ  ] .
+
+
+
+endm

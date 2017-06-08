@@ -1,0 +1,50 @@
+ fmod VENDING-MACHINE-SIGNATURE is
+   sorts Coin Item Marking .
+   subsorts Coin Item  < Marking .
+   op null : -> Marking .
+   op __ : Marking Marking -> Marking [assoc comm id: null] .
+   op $ : -> Coin [format(r! o)] .
+   op q : -> Coin [format(r! o)] .
+   op a : -> Item [format(b! o)] .
+   op c : -> Item [format(b! o)] .
+ endfm
+
+ mod VENDING-MACHINE is
+   including VENDING-MACHINE-SIGNATURE .
+   var M : Marking .
+   rl [add-q] : M => M q .
+   rl [add-$] : M => M $ .
+   rl [buy-c] : $ => c .
+   rl [buy-a] : $ => a q .
+   rl [change]: q q q q => $ .
+ endm
+
+ mod VENDING-MACHINE-QUERY is
+   inc VENDING-MACHINE .
+   pr NAT .
+
+   var M : Marking .  var I : Item . var C : Coin .
+   ops getItems getCoins : Marking  -> Marking .   
+   eq getItems(I M) = I getItems(M) .
+   eq getItems(M) = null [owise] .
+   eq getCoins(C M) = C getCoins(M) .
+   eq getCoins(M) = null [owise] .
+
+   op countItem : Marking Item -> Nat .   
+   op countCoin : Marking Coin -> Nat .   
+
+   eq countItem(M I ,I) = s countItem(M,I) .
+   eq countItem(M ,I) = 0 [owise] .
+
+   eq countCoin(M C ,C) = s countCoin(M,C) .
+   eq countCoin(M ,C) = 0 [owise] .
+
+
+  sort VmState .
+****            $   q   a   c
+  op vmState : Nat Nat Nat Nat -> VmState [ctor] .
+  op  vm2state : Marking -> VmState .
+  eq  vm2state(M) = vmState(countCoin(M,$),countCoin(M,q),
+                            countItem(M,a),countItem(M,c)) .
+
+ endm
