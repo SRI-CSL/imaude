@@ -20,8 +20,9 @@ the simple vending machine example, that illustrates how to use the IMaude syste
 
 ## References
 
-A technical description of the IMaude system can be found in the paper
+A technical description of the IMaude system can be found in the paper:
+
 [IOP: The InterOperability Platform and IMaude: An Interactive Extension of Maude](http://www.csl.sri.com/~clt/Papers/04wrla-iop.pdf)
 by Ian A. Mason and Carolyn L. Talcott.
-From Fifth International Workshop on Rewriting Logic and Its Applications
-(WRLA'2004). Elsevier. 2004.
+
+From Fifth International Workshop on Rewriting Logic and Its Applications (WRLA'2004). Elsevier. 2004.
