@@ -30,12 +30,12 @@ in `vend.maude` and starts up loop mode with the command
 ```
 Initialize the environment with some let commands to name states you are
 interested in exploring, then you can rewrite and apply functions to the
-results using the commands  described in test-vend.txt.
-Examples can be found in input.txt 
+results using the commands  described in [test-vend.txt](VendingMachine/test-vend.txt).
+Examples can be found in [input.txt](VendingMachine/input.txt) 
 and a scenario with output summary can be found in [test-vend.txt](VendingMachine/test-vend.txt).  
 
 You can examine the current environment using the various `show` requests
-of the `IMAUDE-STATE` module (also described in doc-imaude.txt).
+of the `IMAUDE-STATE` module (also described in [doc-imaude.txt](ilib/Doc/doc-imaude.txt)).
 input.txt has examples.
 
 To interact via IOP you must have [IOP Platform](https://github.com/SRI-CSL/iopc) installed with the `IOPBINDIR` binary directory
@@ -43,8 +43,8 @@ in your path.
 
 By default `iop` looks for a file named `startup.txt` to configure itself ---
 what actors to start with what parameters.
-Two sample startups are provided.  `startup-vend.txt` allows you
-interact with the vending machine via the IOP GUI.  `startup-assist.txt`
+Two sample startups are provided.  [startup-vend.txt](VendingMachine/startup-vend.txt) allows you
+interact with the vending machine via the IOP GUI.  [startup-assist.txt](VendingMachine/startup-assist.txt)
 presents a specialized vending machine window with buttons and
 menus for interaction.  You can overide the default choice of `startup.txt`
 by using the `-i` switch.
@@ -63,11 +63,8 @@ IOP will display the file input.txt in IOP GUI interaction window.
 In general, you can  use input.txt in the maude directory of
 interest to predefine or save request scenarios. 
 
-You send messages to IMaude by selecting a line and doing <KEY>l  where
-KEY is ctl on Linux and cmd on Mac.
-
-
-### Shared Libraries
+You send messages to IMaude by selecting a line and doing `<KEY>l`  where
+`KEY` is `control` on Linux and `command` on Mac.
 
 
 ## References
