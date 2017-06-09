@@ -19,12 +19,12 @@ There are two ways to use the IMaude interaction environment: using only Maude
 or using the IOP framework. These are illustrated with the help of the vending
 machine example in subdirectory VendingMachine
 
-To interact using only Maude: cd to [VendingMachine](VendingMachine), start Maude and type
+To interact using only Maude, cd to [VendingMachine](VendingMachine), and type
 ```
-  load load-vend
+  maude load-vend
 ```
-which loads the necessary IMaude code, the vending machine specification
-in [vend.maude](VendingMachine/vend.maude) and starts up loop mode with the command
+[load-vend.maude](VendingMachine/load-vend.maude) loads the necessary IMaude code, maude's model checker, the vending machine specification
+in [vend.maude](VendingMachine/vend.maude) and then starts up loop mode with the command
 ```
   loop init .
 ```
@@ -60,9 +60,9 @@ to get the vending machine window, a GUI application written in jlambda in the f
 [vend.lsp](VendingMachine/vend.lsp). The IOP GUI window will also be available, sometimes
 useful for debugging the system of actors.
 
-IOP will display the file input.txt in IOP GUI interaction window.  
+IOP will display the file [input.txt](VendingMachine/input.txt) in IOP GUI interaction window.  
 
-In general, you can  use input.txt in the maude directory of
+In general, you can use input.txt in the maude directory of
 interest to predefine or save request scenarios. 
 
 You send messages to IMaude by selecting a line and doing `<KEY>l`  where
