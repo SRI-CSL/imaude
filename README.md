@@ -24,7 +24,7 @@ To interact using only Maude: cd to [VendingMachine](VendingMachine), start Maud
   load load-vend
 ```
 which loads the necessary IMaude code, the vending machine specification
-in `vend.maude` and starts up loop mode with the command
+in [vend.maude](VendingMachine/vend.maude) and starts up loop mode with the command
 ```
   loop init .
 ```
@@ -56,7 +56,9 @@ to interact with the vending machine via the IOP GUI.  Type
 ```
   iop -i startup-assist.txt
 ```
-to get the vending machine window.  (The IOP GUI will also be avaliable.)
+to get the vending machine window, a GUI application written in jlambda in the file 
+[vend.lsp](VendingMachine/vend.lsp). The IOP GUI window will also be available, sometimes
+useful for debugging the system of actors.
 
 IOP will display the file input.txt in IOP GUI interaction window.  
 
