@@ -6,6 +6,7 @@ with the [Maude system](http://maude.cs.uiuc.edu) and the
 [IOP Platform](https://github.com/SRI-CSL/iopc)
  to program interactive Maude applications.  It is used in systems such as the 
  [Pathway Logic Assistant](http://pl.csl.sri.com/) and the [Maude-NPA System](http://maude.cs.illinois.edu/w/index.php?title=Maude_Tools:_Maude-NPA) and its [GUI.](http://www.csl.sri.com/users/iam/NPA/index.html)
+ You can download the code either by cloning this repository or by downloading the latest [release.](https://github.com/SRI-CSL/imaude/releases)
 
 ## Overview
 
@@ -19,6 +20,7 @@ There are two ways to use the IMaude interaction environment: using only Maude
 or using the IOP framework. These are illustrated with the help of the vending
 machine example in subdirectory VendingMachine
 
+#### Maude Commandline
 To interact using only Maude, cd to [VendingMachine](VendingMachine), and type
 ```
   maude load-vend
@@ -38,6 +40,7 @@ You can examine the current environment using the various `show` requests
 of the `IMAUDE-STATE` module (also described in [doc-imaude.txt](ilib/Doc/doc-imaude.txt)).
 input.txt has examples.
 
+#### Maude Actor Systems
 To interact via IOP you must have [IOP Platform](https://github.com/SRI-CSL/iopc) installed with the `IOPBINDIR` binary directory
 in your path.  
 
