@@ -1,4 +1,2 @@
 start maude iop_maude_wrapper basura load-vend
-#start graphics2d iop_graphics2d_wrapper $IOPBINDIR -cp ~/Maude/Lib/M2.2/PLA/pla.jar  -Xms256m -Xmx1024m 
-start filemanager iop_filemanager
 select maude
