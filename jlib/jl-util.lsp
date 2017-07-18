@@ -346,6 +346,12 @@
     (apply setAdd val elt)
 ))
 
+;; increments count of elt in map
+(define mapIncCount (map elt) 
+  (let ((cnt0 (invoke map "get" elt)) 
+        (cnt (if (isnull cnt0) (array int (int 0)) cnt0)) ) 
+    (if (isnull cnt0) (invoke map "put" elt cnt))
+    (aset cnt (int 0) (+ (aget cnt (int 0)) (int 1)))  ))
 
 ;; assume maps from symbols to arrlists
 ;; map0 will be updated
@@ -460,6 +466,12 @@
 
 
 (define intersect (a0 a1) (apply diff a0 (apply diff a0 a1)))
+
+(define intersectArr (arr arrl) 
+  (let ((res (apply mkMt))) 
+	  (for elt arr 
+		 (if (invoke arrl "contains" elt) (invoke res "add" elt))) 
+  	res ))
 
 (define intersects (a0 a1) (apply intersectsX a0 a1 (invoke a0 "size")(int 0)))
 (define intersectsX (a0 a1 len cur)
