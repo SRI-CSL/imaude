@@ -1,0 +1,87 @@
+#! /usr/bin/env python3
+
+import sys
+import pickle
+import io
+from six import string_types
+
+# ./pickle2json pca-km-clustering-n256-ratio.pkl pca-km-clustering-n256-ratio.json
+# ./pickle2json pca-ranking-comp-0-neg-ratio.pkl pca-ranking-comp-0-neg-ratio.json
+# ./pickle2json pca-ranking-comp-0-pos-ratio.pkl pca-ranking-comp-0-pos-ratio.json
+
+
+class StringBuffer(object):
+
+  def __init__(self):
+    self.empty = True
+    self._stringio = io.StringIO()
+
+  def __str__(self):
+    val = self._stringio.getvalue()
+    self._stringio.close()
+    return val
+
+  def append(self, obj):
+    data = str(obj)
+    if self.empty and len(data) > 0:
+      self.empty = False
+    self._stringio.write(str(obj))
+    return self
+
+  def isempty(self):
+    return self.empty
+
+
+
+def pickle2json(data, sb, newline):
+    if isinstance(data, string_types):
+        str2json(data, sb)
+    elif isinstance(data, frozenset) or isinstance(data, set):
+        set2json(data, sb)
+    elif isinstance(data, list):
+        list2json(data, sb, newline)
+
+def str2json(data, sb):
+    sb.append('"{0}"'.format(data))
+
+def set2json(data, sb):
+    list2json(list(data), sb, False)
+
+def list2json(data, sb, newline):
+    first = True
+    sb.append('[')
+    for e in data:
+        if first:
+            first = False
+        else:
+            sb.append(', ')
+            if newline:
+                sb.append('\n')
+        pickle2json(e, sb, newline)
+    sb.append(']')
+    if newline:
+        sb.append('\n')
+
+
+
+usage = """
+Usage: {0} pickle_file_in json_file_out
+
+"""
+
+def main(args):
+    if len(args) != 3:
+        print(usage.format(args[0]))
+        return 1
+    else:
+        with open(args[1], 'rb') as fp_in:
+            sb = StringBuffer()
+            data =  pickle.Unpickler(fp_in).load()
+            pickle2json(data, sb, True)
+        with open(args[2], 'w') as fp_out:
+            fp_out.write(str(sb))
+        return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv))
