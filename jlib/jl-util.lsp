@@ -180,6 +180,17 @@
 	res
 	))
 
+(define mkSix (x0 x1 x2 x3 x4 x5)
+ (let ((res (apply mkMt)))
+   (invoke res "add" x0)	
+   (invoke res "add" x1)	
+   (invoke res "add" x2)	
+   (invoke res "add" x3)	
+   (invoke res "add" x4)	
+   (invoke res "add" x5)	
+	res
+	))
+
 (define mkMap1 (key val)
   (let ((res (apply mkMtMap)))
 	  (invoke res "put" key val)
@@ -411,6 +422,14 @@
     (for elt arrl (if (apply pfun elt) (invoke sarrl "add" elt)))
     sarrl
  ))
+
+;;; list of keys st fun(map[key]) is true
+(define mapSelect (map fun)
+ (let ((res (apply mkMt)))
+   (for key (invoke map "keySet")
+	   (if (apply fun (invoke map "get" key)) (invoke res "add" key)))
+	 res ))
+
 
 (define andArrl (arrl pfun) 
   (try (for elt arrl 
