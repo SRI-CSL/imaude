@@ -201,6 +201,18 @@
 	  (invoke res "put" key1 val1)
 		res	))
 
+;; a list of numerals from start to (not including) end
+(define enum (start end) (let ((res (apply mkMt))) (apply enumX res start end)))
+
+(define enumX (res cur end)
+ (if (>= cur end) 
+   res 
+   (seq 
+    (invoke res "add" (concat cur "")) 
+    (apply enumX res (+ cur (int 1)) end)) 
+  ))
+
+
 ;; objs is a collection of maps  
 (define getByName (objs str)
   (apply getByNameX objs str (invoke objs "size") (int 0)))    
