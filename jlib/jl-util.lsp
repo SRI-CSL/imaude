@@ -640,13 +640,27 @@
 
 
 (define unsplit (row sep)
+  (if (apply isArray row) 
+    (apply unsplitArr row sep)
+    (apply unsplitArrl row sep)
+ ))
+
+(define unsplitArr (row sep)
+ (let ((strb (object ("java.lang.StringBuffer")))
+       (len (lookup row "length")) )
+  (invoke strb "append" (aget row (int 0)))
+	(for ix len 
+    (if (> ix (int 0))
+	    (invoke strb "append" (concat sep (aget row ix)) ) ))
+	(invoke strb "toString")
+ ))
+
+(define unsplitArrl (row sep)
  (let ((strb (object ("java.lang.StringBuffer")))
        (len (invoke row "size")) )
   (invoke strb "append" (invoke row "get" (int 0)))
-	(for ix len (if (> ix (int 0))(seq
-	  (invoke strb "append" sep)
-		(invoke strb "append" (invoke row "get" ix))
-	)))
+	(for ix len (if (> ix (int 0))
+	  (invoke strb "append" (concat sep  (invoke row "get" ix))	)))
 	(invoke strb "toString")
  ))
  
