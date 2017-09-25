@@ -960,4 +960,16 @@
    map
  ))
 
+;; map col i to col j
+(define tab2map (fname header? sep i j) 
+  (let ((br (apply getBufferedReader fname)) 
+        (res (apply mkMtMap)) 
+        (fun (lambda (line) 
+               (let ((parts (invoke line "split" sep))
+                     (len (lookup parts "length")) ) 
+        (if (and (< j len)(< i len)) 
+         (apply mapAdd res  (aget parts i) (aget parts j))
+       ) )))   ) 
+      (if header? (invoke br "readLine")) 
+      (apply readTilEnd br fun) res ))
 		
