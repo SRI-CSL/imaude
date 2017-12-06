@@ -1,9 +1,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
 #include <pthread.h>
 #include <unistd.h>
 
+
+static void chld_handler(int sig){
+  /* not async safe but who cares. */
+  fprintf(stderr, "The child died (%d)!\n", sig);
+  exit(EXIT_FAILURE);
+}
 
 static char* maude_argv[] = {"maude", "-no-tecla", "-interactive", NULL};
 
@@ -33,7 +40,6 @@ static void *echo(void *arg){
   return NULL; 
 }
 
-
 int main(int argc, char** argv){
   int pin[2], pout[2], perr[2];
   
@@ -41,6 +47,14 @@ int main(int argc, char** argv){
     fprintf(stderr, "Usage: %s <maude executable>  [maude module]\n", argv[0]);
     exit(EXIT_FAILURE);
   }
+
+  /* install SIGCHLD handler */
+  struct sigaction sigactsignal;
+  sigactsignal.sa_handler = chld_handler;
+  sigactsignal.sa_flags = SA_NOCLDSTOP;
+  sigfillset(&sigactsignal.sa_mask);
+  sigaction(SIGCHLD, &sigactsignal, NULL);
+
 
   char* maude_exe = argv[1];
 
@@ -64,7 +78,10 @@ int main(int argc, char** argv){
     /*  this hack is needed to convince maude to move its idea of where it is.  */
     unsetenv("PWD");
 
-    execvp(maude_exe, maude_argv);
+    if(execvp(maude_exe, maude_argv) == -1){
+      perror("execvp of maude failed.");
+      exit(EXIT_FAILURE);
+    }
 
     /* end of child code */
   } else { 
