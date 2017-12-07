@@ -31,11 +31,11 @@ static void *echo(void *arg){
       fprintf(stderr, "Listening to stdin\n");
     } else {
       fprintf(stderr, "Listening to Maude's %s\n", p.to == 1 ? "stdout" : "stderr");
-      bytesread = read(p.from, buff, BUFFSIZE);
-      if(bytesread == -1){ break; }
-      byteswritten = write(p.to, buff, bytesread);
-      if(bytesread != byteswritten){ break; }
     }
+    bytesread = read(p.from, buff, BUFFSIZE);
+    if(bytesread == -1){ break; }
+    byteswritten = write(p.to, buff, bytesread);
+    if(bytesread != byteswritten){ break; }
   }
   return NULL; 
 }
@@ -107,8 +107,6 @@ int main(int argc, char** argv){
       fprintf(stderr, "Could not spawn stdout echo thread\n");
       return -1;
     }
-
-    sleep(30);
 
     if(argc == 3){
       int len = strlen(argv[2]);
