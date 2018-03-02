@@ -78,6 +78,8 @@ int main(int argc, char** argv){
     /*  this hack is needed to convince maude to move its idea of where it is.  */
     unsetenv("PWD");
 
+    fprintf(stderr, "I am the child and I am%sa tty\n", isatty(pout[0]) ? " " : " not " );
+    
     if(execvp(maude_exe, maude_argv) == -1){
       perror("execvp of maude failed.");
       exit(EXIT_FAILURE);
@@ -87,6 +89,8 @@ int main(int argc, char** argv){
   } else { 
     /* i'm the boss */
     pthread_t thread[2];
+
+    fprintf(stderr, "I am the boss and I am%sa tty\n", isatty(STDOUT_FILENO) ? " " : " not " );
 
     close(pin[0]);
     close(perr[1]);

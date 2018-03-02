@@ -3,6 +3,7 @@
 import sys
 import pickle
 import io
+import types
 from six import string_types
 
 # ./pickle2json pca-km-clustering-n256-ratio.pkl pca-km-clustering-n256-ratio.json
@@ -34,12 +35,19 @@ class StringBuffer(object):
 
 
 def pickle2json(data, sb, newline):
-    if isinstance(data, string_types):
+    if isinstance(data, (int, float, complex)):
+        num2json(data, sb)
+    elif isinstance(data, string_types):
         str2json(data, sb)
     elif isinstance(data, frozenset) or isinstance(data, set):
         set2json(data, sb)
-    elif isinstance(data, list):
+    elif isinstance(data, list) or  isinstance(data, tuple):
         list2json(data, sb, newline)
+    else:
+        print("Unknown type ", type(data))
+
+def num2json(data, sb):
+    sb.append('"{0}"'.format(data))
 
 def str2json(data, sb):
     sb.append('"{0}"'.format(data))
