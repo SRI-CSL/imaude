@@ -369,6 +369,24 @@
     (apply setAdd val elt)
 ))
 
+;; arg is map key -> <count>
+;; result is [mxcount, keys]  keys have mxcount
+(define maxCount (countMap)
+  (let ((keys (invoke countMap "keySet"))
+        (mx (array int (int 0)))    
+        (elts (array java.lang.Object (apply mkMt)))    
+        )
+    (for key keys
+      (let ((cnt (aget (invoke countMap "get" key) (int 0))))
+        (if (= cnt (aget mx (int 0))) 
+          (invoke (aget elts (int 0)) "add" key)
+          (if (> cnt (aget mx (int 0)))
+            (seq (aset mx (int 0) cnt) 
+                 (aset elts (int 0) (apply mkSingle key)) )
+       )) ))  
+  (apply mkPair (concat (aget mx (int 0)) "") (aget elts (int 0)))
+  ))
+
 ;; increments count of elt in map
 (define mapIncCount (map elt) 
   (let ((cnt0 (invoke map "get" elt)) 
