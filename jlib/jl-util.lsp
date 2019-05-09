@@ -190,6 +190,13 @@
    (invoke res "add" x5)	
 	res
 	))
+  
+(define last (arrl) 
+ (let ((ix (- (invoke arrl "size") (int 1))))
+   (if (>= ix (int 0))   (invoke arrl "get" ix) (object null)) ))
+
+(define first (arrl) 
+ (if (invoke arrl "isEmpty")(object null)(invoke arrl "get" (int 0))) )
 
 (define mkMap1 (key val)
   (let ((res (apply mkMtMap)))
