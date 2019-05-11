@@ -376,6 +376,20 @@
     (apply setAdd val elt)
 ))
 
+;; add elts to list associated to key
+;; init with empty list if no association exists
+(define mapArrlSetAdd (map key elts)
+  (let ((val0 (invoke map "get" key))
+        (val (if (isobject val0) 
+               val0
+               (let ((val1 (apply mkMt)))
+                  (invoke map "put" key val1)
+                  val1)))
+        )
+    (for elt elts (apply setAdd val elt))
+))
+
+
 ;; arg is map key -> <count>
 ;; result is [mxcount, keys]  keys have mxcount
 (define maxCount (countMap)
