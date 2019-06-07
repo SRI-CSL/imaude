@@ -534,6 +534,8 @@
    res
  ))
 
+;; maybe more efficient
+(define isect (a0 a1) (let ((res (object ("java.util.ArrayList" a0) ))) (invoke res "retainAll" a1)  res))
 
 (define intersect (a0 a1) (apply diff a0 (apply diff a0 a1)))
 
